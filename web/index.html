@@ -7,90 +7,114 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="page" id="page">
-  <!-- 顶部资源栏 -->
-  <div class="topbar">
-    <div class="res"><img class="res-ico" src="../images/icons/coin.png"><span class="res-num" id="coinText">0</span><span class="res-sub" id="cpsText">+0/s</span></div>
-    <div class="res"><img class="res-ico" src="../images/icons/soul.png"><span class="res-num" id="soulText">0</span><span class="res-sub" id="levelText">Lv.1</span></div>
-    <div class="expbar"><div class="expbar-fill" id="expFill"></div></div>
-    <button class="icon-btn" id="resetBtn" title="重置存档">⚙️</button>
-  </div>
 
-  <!-- 2D 战场（俯视战棋）：宿舍/大门/炮塔 vs 走廊来袭猛鬼 -->
-  <div class="battle-wrap">
-    <canvas id="battleCanvas" width="750" height="430"></canvas>
-  </div>
-
-  <!-- 波次横幅（信息已并入战场 HUD，视觉冗余故隐藏，保留 DOM 兼容） -->
-  <div class="wave-banner" id="waveBanner">
-    <div class="wave-left"><img class="wave-ghost" id="waveGhost" src="../images/sprites/ghost_1.png"><span class="wave-title" id="waveTitle">第 0 波猛鬼</span></div>
-    <div class="wave-right"><span class="wave-next" id="nextWaveText">准备中</span></div>
-    <span class="threat-tag" id="threatTag" style="display:none">危险！建议升级防御</span>
-  </div>
-
-  <!-- 床区 -->
-  <div class="section-title">宿舍 · 躺平床位</div>
-  <div class="bed-grid" id="bedGrid"></div>
-
-  <!-- 防御区 -->
-  <div class="section-title">防御设施</div>
-  <div class="def-row">
-    <div class="def-card">
-      <img class="def-img" id="doorImg" src="../images/tiles/door_1.png">
-      <div class="def-info">
-        <span class="def-name" id="doorName">大门 Lv.1</span>
-        <span class="def-hp" id="doorHp">血 180/180</span>
-        <div class="hpbar"><div class="hpbar-fill" id="doorHpFill" style="width:100%"></div></div>
-        <span class="def-dps" id="doorDps">反击 4/s（含英雄）</span>
+<!-- ============ 屏幕1：首页（关卡选择 / 奖励 / 长效设置）============ -->
+<div class="screen screen-home" id="screenHome">
+  <div class="home-head">
+    <div class="home-title">
+      <img class="home-logo" src="../images/sprites/ghost_4.png" alt="">
+      <div>
+        <h1>猛鬼宿舍</h1>
+        <p>躺平发育 · 关卡挑战</p>
       </div>
-      <button class="btn-up" id="doorBtn">升级</button>
     </div>
-    <div class="def-card">
-      <img class="def-img" src="../images/icons/turret.png">
-      <div class="def-info">
-        <span class="def-name" id="turretName">炮塔 Lv.0</span>
-        <span class="def-dps" id="turretDps">伤害 0/s</span>
+    <button class="icon-btn home-gear" id="homeSettings" title="设置">⚙️</button>
+  </div>
+
+  <!-- 长效钱包 -->
+  <div class="wallet">
+    <div class="res"><img class="res-ico" src="../images/icons/coin.png"><span id="wCoin">0</span></div>
+    <div class="res"><img class="res-ico" src="../images/icons/soul.png"><span id="wSoul">0</span></div>
+    <button class="wallet-claim" id="dailyBonusBtn">📺 每日福利</button>
+  </div>
+
+  <div class="home-section">
+    <div class="section-title">选择关卡 <span class="section-sub">通关解锁下一关</span></div>
+    <div class="level-grid" id="levelGrid"></div>
+  </div>
+
+  <div class="home-section">
+    <div class="section-title">广告福利</div>
+    <div class="home-ad-row">
+      <div class="ad-card" id="adCoin" role="button">
+        <img class="ad-ico" src="../images/icons/coin.png"><div class="ad-name">金币红包</div><div class="ad-sub">钱包 +金币</div>
       </div>
-      <button class="btn-up" id="turretBtn">升级</button>
+      <div class="ad-card" id="adSoul" role="button">
+        <img class="ad-ico" src="../images/icons/soul.png"><div class="ad-name">灵魂馈赠</div><div class="ad-sub">钱包 +灵魂</div>
+      </div>
     </div>
   </div>
-  <div class="def-card altar">
-    <img class="def-img" src="../images/icons/sword_gold.png">
-    <div class="def-info">
-      <span class="def-name" id="altarName">灵魂祭坛 Lv.0</span>
-      <span class="def-dps" id="altarBonus">全局产量 +0%</span>
-    </div>
-    <button class="btn-up soul-btn" id="altarBtn">献祭</button>
-  </div>
 
-  <!-- 英雄区 -->
-  <div class="section-title">英雄 <span class="deal-tag" id="dealTag" style="display:none">📺 7折券生效中</span></div>
-  <div class="hero-grid" id="heroGrid"></div>
-
-  <!-- 任务区 -->
-  <div class="section-title">每日任务 <span class="quest-date">每天刷新</span></div>
-  <div class="quest-list" id="questList"></div>
-
-  <!-- 成就区 -->
-  <div class="section-title">成就</div>
-  <div class="ach-list" id="achList"></div>
-
-  <!-- 广告区 -->
-  <div class="section-title">广告福利（Web试玩版：模拟广告，3秒倒计时）</div>
-  <div class="ad-grid" id="adGrid"></div>
-
-  <div class="footer">猛鬼宿舍·躺平发育 v0.3.0 Web试玩版 · 素材 CC0 (Kenney) · <a href="https://github.com/xycjscs/menggui-tangping" target="_blank">源码</a></div>
+  <div class="footer">猛鬼宿舍·躺平发育 v0.4.0 Web试玩版 · 素材 CC0 (Kenney) · <a href="https://github.com/xycjscs/menggui-tangping" target="_blank">源码</a></div>
 </div>
 
-<!-- 离线收益弹窗 -->
-<div class="modal-mask" id="offlineModal" style="display:none">
-  <div class="modal">
-    <div class="modal-title">🌙 离线收益</div>
-    <div class="modal-line">你躺平了 <b class="hl" id="offSec"></b></div>
-    <div class="modal-line">赚得金币 <b class="hl" id="offCoin"></b></div>
-    <div class="modal-warn" id="offCap" style="display:none">（离线收益上限8小时）</div>
-    <button class="btn-primary" id="offDouble">📺 看广告收益x2</button>
-    <button class="btn-ghost" id="offClaim">领取</button>
+<!-- ============ 屏幕2：进入页（关卡详情 + 支援选择）============ -->
+<div class="screen screen-entry" id="screenEntry" style="display:none">
+  <button class="back-btn" id="entryBack">← 返回</button>
+  <div class="entry-card">
+    <div class="entry-badge" id="entryId">关卡 1</div>
+    <h2 id="entryName">守夜 · 宿舍一楼</h2>
+    <p class="entry-sub" id="entrySub">5 波 · 新手</p>
+    <div class="entry-goal">目标：守住宿舍，清除 <b id="entryGoal">5</b> 波猛鬼</div>
+    <div class="entry-stars" id="entryStars"></div>
+
+    <div class="entry-row">
+      <div class="entry-row-label">初始配置</div>
+      <div class="entry-init" id="entryInit"></div>
+    </div>
+
+    <div class="entry-row">
+      <div class="entry-row-label">选择入场支援（免费 · 本局限用）</div>
+      <div class="support-row" id="supportRow"></div>
+    </div>
+
+    <div class="entry-row elite-row" id="eliteRow">
+      <div class="entry-row-label">💎 精锐支援（钱包金币 · 开局额外资源）</div>
+      <div class="elite-info" id="eliteInfo"></div>
+    </div>
+
+    <button class="btn-primary entry-go" id="entryGo">进入宿舍 →</button>
+    <div class="entry-warn">门被打破后可看广告复活（每局限 1 次）；认输则本局作废</div>
+  </div>
+</div>
+
+<!-- ============ 屏幕3：游戏（战场为主角，点哪里弹哪里）============ -->
+<div class="screen screen-game" id="screenGame" style="display:none">
+  <!-- 顶部细 HUD：退出 / 关卡 / 本局资源 -->
+  <div class="game-topbar">
+    <button class="icon-btn game-exit" id="gameExit">☰</button>
+    <div class="game-top-title"><b id="gtName">关卡 1</b><span id="gtProgress">0/5 波</span></div>
+    <div class="game-top-res"><img src="../images/icons/coin.png" class="res-ico"><span id="gtCoin">0</span></div>
+    <div class="game-top-res"><img src="../images/icons/soul.png" class="res-ico"><span id="gtSoul">0</span></div>
+  </div>
+
+  <!-- 战场：主展示区 -->
+  <div class="battle-stage" id="battleStage">
+    <canvas id="battleCanvas"></canvas>
+    <div class="battle-hint" id="battleHint">点床/门/炮塔/祭坛/英雄 升级 · 点空白处收起</div>
+  </div>
+</div>
+
+<!-- 游戏内点触菜单（浮层，贴在点中的元素旁） -->
+<div class="tap-menu-mask" id="tapMenuMask" style="display:none">
+  <div class="tap-menu" id="tapMenu">
+    <div class="tap-menu-title" id="tapTitle"></div>
+    <div class="tap-menu-desc" id="tapDesc"></div>
+    <div class="tap-menu-stats" id="tapStats"></div>
+    <button class="btn-primary" id="tapAction"></button>
+    <button class="btn-ghost tap-close" id="tapClose">收起</button>
+  </div>
+</div>
+
+<!-- 胜利结算 -->
+<div class="modal-mask" id="winModal" style="display:none">
+  <div class="modal win-modal">
+    <div class="win-stars" id="winStars"></div>
+    <div class="modal-title">🏆 关卡通过！</div>
+    <div class="modal-line" id="winLine"></div>
+    <div class="modal-reward" id="winReward"></div>
+    <button class="btn-primary" id="winNext">下一关 →</button>
+    <button class="btn-ghost" id="winHome">返回首页（再挑战可刷星）</button>
   </div>
 </div>
 
@@ -100,8 +124,8 @@
     <img class="modal-ghost" src="../images/sprites/ghost_4.png">
     <div class="modal-title danger">👻 大门被撞破！</div>
     <div class="modal-line" id="defeatWaveText"></div>
-    <button class="btn-primary" id="reviveBtn">📺 看广告立刻复活</button>
-    <button class="btn-ghost" id="acceptBtn">接受失败（灵魂x0.3，床等级减半）</button>
+    <button class="btn-primary" id="reviveBtn">📺 看广告立刻复活（每局 1 次）</button>
+    <button class="btn-ghost" id="acceptBtn">认输（本局作废，返回首页）</button>
   </div>
 </div>
 
@@ -114,7 +138,7 @@
   </div>
 </div>
 
-<!-- 招募确认弹窗 -->
+<!-- 通用确认弹窗（退出游戏/重置等） -->
 <div class="modal-mask" id="confirmModal" style="display:none">
   <div class="modal">
     <div class="modal-title" id="confirmTitle"></div>
@@ -128,6 +152,7 @@
 
 <script src="bootstrap.js"></script>
 <script src="../js/battle/battleView.js"></script>
+<script src="../js/levels.js"></script>
 <script src="game.js"></script>
 </body>
 </html>
