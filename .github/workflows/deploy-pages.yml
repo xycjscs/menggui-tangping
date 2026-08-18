@@ -25,6 +25,10 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Pages
         uses: actions/configure-pages@v5
+        with:
+          # 仓库 Pages 尚未启用时，由本 action 用 runner 的 GITHUB_TOKEN 启用
+          # （token 缺 Pages 权限时 API 直接 PUT /pages 会 404，必须走这里）
+          enablement: true
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
