@@ -14,6 +14,13 @@
     formatNum = window.num.formatNum;
     formatDuration = window.num.formatDuration;
   }
+  // 调试钩子（web 试玩版专用）：供自动测试/手动观察快进虚拟时间
+  // 注意：state 是引用，测试脚本可修改 nextWaveAt/coin/wave 等字段
+  window.__game = {
+    get state() { return s; },
+    get core() { return core; },
+    get battle() { return battle; }
+  };
   const SAVE_KEY = 'menggui_tangping_save_web_v1';
 
   const $ = id => document.getElementById(id);
@@ -29,6 +36,61 @@
   let toastTimer = null;
   let adTimer = null;
   let loopTimer = null;
+
+  // ============ 2D 战场（v0.3）============
+  let battle = null;          // BattleView 实例
+  let battleImgs = {};        // 预加载素材 {key: HTMLImageElement}
+  const BATTLE_IMGS = [
+    ['floor', '../images/tiles/floor_wood.png'],
+    ['brick', '../images/tiles/brick.png'],
+    ['bed', '../images/sprites/bed.png'],
+    ['ghost1', '../images/sprites/ghost_1.png'],
+    ['ghost2', '../images/sprites/ghost_2.png'],
+    ['ghost3', '../images/sprites/ghost_3.png'],
+    ['boss', '../images/sprites/ghost_4.png'],
+    ['door1', '../images/tiles/door_1.png'],
+    ['door2', '../images/tiles/door_2.png'],
+    ['door3', '../images/tiles/door_3.png'],
+    ['coin', '../images/icons/coin.png'],
+    ['soul', '../images/icons/soul.png'],
+    ['knight', '../images/icons/sword_gold.png'],
+    ['archer', '../images/icons/sword_green.png'],
+    ['mage', '../images/icons/sword_purple.png'],
+    ['priest', '../images/icons/sword_orange.png']
+  ];
+
+  function preloadBattleImages() {
+    return Promise.all(BATTLE_IMGS.map(p => new Promise(res => {
+      const img = new Image();
+      img.onload = () => { battleImgs[p[0]] = img; res(); };
+      img.onerror = () => res();   // 素材缺失时降级为程序化绘制
+      img.src = p[1];
+    })));
+  }
+
+  function setupBattle() {
+    const cv = $('battleCanvas');
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = 750 * dpr;
+    cv.height = 430 * dpr;
+    cv._dpr = dpr;
+    cv._ctx = cv.getContext('2d');
+    battle = new window.BattleView.BattleView({ formatNum: n => formatNum(n) });
+    battle.resize(750, 430);
+    let last = performance.now();
+    (function loop(now) {
+      const dt = Math.min(0.1, Math.max(0.001, (now - last) / 1000));
+      last = now;
+      if (s && !document.hidden) {
+        battle.frame(window.BattleView.makeSnapshot(core, s), dt);
+        const ctx = cv._ctx;
+        ctx.setTransform(cv._dpr, 0, 0, cv._dpr, 0, 0);
+        ctx.clearRect(0, 0, 750, 430);
+        battle.render(ctx, battleImgs);
+      }
+      requestAnimationFrame(loop);
+    })(last);
+  }
 
   // ============ 存档 ============
   function save() {
@@ -60,6 +122,8 @@
     }
     buildStaticUI();
     loopTimer = setInterval(tickOnce, 1000);
+    // v0.3：素材预加载完成后启动战场渲染
+    preloadBattleImages().finally(setupBattle);
     document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
     window.addEventListener('beforeunload', save);
     refresh();
