@@ -47,6 +47,13 @@
   var DIE_DUR = 0.45;             // 死亡动画时长
   var LUNGE_DUR = 0.32;           // 突刺攻击时长
   var GHOST_TINTS = ['#cfc6e8', '#bfe3d6', '#e6d9c2'];  // 备用小怪的体色（无素材时）
+  // v0.5 道具视觉（图标用 emoji 字形，颜色/光晕用于底座特效）
+  var ITEM_VIS = {
+    barrier: { icon: '🚧', color: '#e0a53d', glow: 'rgba(224,165,61,0.28)' },
+    spike:   { icon: '🔱', color: '#7ce7ff', glow: 'rgba(124,231,255,0.25)' },
+    lamp:    { icon: '🏮', color: '#ffd75e', glow: 'rgba(255,215,94,0.25)' },
+    medkit:  { icon: '💊', color: '#7dff9a', glow: 'rgba(125,255,154,0.25)' }
+  };
   var HERO_STYLE = {
     knight: { color: '#ffd75e', char: '骑', interval: 1.2 },
     archer: { color: '#7dff9a', char: '猎', interval: 1.6 },
@@ -72,6 +79,10 @@
       }),
       beds: s.beds.map(function (b) { return { unlocked: b.unlocked, level: b.level }; }),
       altarLevel: s.altar.level,
+      // v0.5 道具
+      itemSlots: (s.itemSlots || []).slice(),
+      itemBarrierHp: s.itemBarrierHp || 0,
+      itemBarrierMax: (s.itemSlots || []).filter(function (x) { return x === 'barrier'; }).length * ((core.ITEMS && core.ITEMS.barrier) ? core.ITEMS.barrier.barrierHp : 150),
       defeated: !!s.defeated,
       nextWaveIn: Math.max(0, s.nextWaveAt - s.time),
       nextIsBoss: core.isBossWave(s.wave + 1),
@@ -139,7 +150,18 @@
     this.cellH = (this.floorBot - this.floorTop) / GHOST_ROWS;
     this.doorTop = this.hudH + H * 0.045;
     this.doorBot = H - H * 0.045;
+    // v0.5 道具插槽：宿舍区 2 个（床区下方空地）+ 门前走廊 2 个（怪要闯过它们）
+    this.slotSize = 30;
+    this.itemSlots = [
+      { x: W * 0.155, y: H * 0.885 },   // 0 宿舍·左下（祭坛旁）
+      { x: W * 0.222, y: H * 0.795 },   // 1 宿舍·中下
+      { x: this.corridorL + 24, y: H * 0.36 },  // 2 门前走廊·上
+      { x: this.corridorL + 24, y: H * 0.64 }   // 3 门前走廊·下
+    ];
   };
+
+  /** 道具插槽中心（设计空间） */
+  P.slotPos = function (i) { return this.itemSlots[i]; };
 
   P.bedPos = function (i) {
     var row = i < 3 ? 0 : 1, col = i % 3;
@@ -488,6 +510,14 @@
         return { type: 'bed', index: bi };
       }
     }
+    // v0.5 道具插槽（优先级最低）
+    for (var si = 0; si < this.itemSlots.length; si++) {
+      var sp2 = this.itemSlots[si];
+      var rr = this.slotSize * 0.5 + 6;
+      if (x >= sp2.x - rr && x <= sp2.x + rr && y >= sp2.y - rr && y <= sp2.y + rr) {
+        return { type: 'slot', index: si };
+      }
+    }
     return null;
   };
   P.allFinite = function () {
@@ -546,6 +576,9 @@
     // --- 墙 / 门 / 炮塔 ---
     this._drawWall(ctx, imgs);
     this._drawTurret(ctx, imgs);
+
+    // --- v0.5 道具插槽 ---
+    this._drawItemSlots(ctx, imgs);
 
     // --- 幽灵（按 y 排序，下层的后画）---
     var list = Array.from(this.ghosts.values()).sort(function (a, b) { return a.y - b.y; });
@@ -702,6 +735,75 @@
     ctx.font = 'bold 10px sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('Lv' + lvl, pos.x, pos.y + 21.5);
+  };
+
+  // ---------- v0.5 道具插槽 ----------
+  P._drawItemSlots = function (ctx, imgs) {
+    var snap = this.snap;
+    var slots = snap && Array.isArray(snap.itemSlots) ? snap.itemSlots : [null, null, null, null];
+    for (var i = 0; i < this.itemSlots.length; i++) {
+      var p = this.itemSlots[i];
+      var id = slots[i] || null;
+      var r = this.slotSize * 0.5;
+      if (!id) {
+        // 空槽：虚线圆 + 淡加号（提示可放置）
+        ctx.globalAlpha = 0.32 + 0.1 * Math.sin(this.t * 2 + i);
+        ctx.strokeStyle = '#9a92b8';
+        ctx.setLineDash([4, 4]);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, TAU); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#9a92b8';
+        ctx.font = 'bold 14px sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('+', p.x, p.y + 1);
+        ctx.globalAlpha = 1;
+        continue;
+      }
+      var st = ITEM_VIS[id];
+      // 底座（已占）
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = st.glow;
+      ctx.beginPath(); ctx.arc(p.x, p.y, r + 4, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#241d38';
+      ctx.strokeStyle = st.color;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, TAU); ctx.fill(); ctx.stroke();
+      // 图标（emoji 字形，保证不依赖素材）
+      ctx.globalAlpha = 1;
+      ctx.font = Math.round(r * 1.05) + 'px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(st.icon, p.x, p.y + 2);
+      // 特效
+      if (id === 'barrier') {
+        // 屏障血条（共用池）
+        var pct = snap.itemBarrierMax > 0 ? clamp(snap.itemBarrierHp / snap.itemBarrierMax, 0, 1) : 0;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(p.x - r, p.y + r + 4, r * 2, 5);
+        ctx.fillStyle = pct > 0.5 ? '#4caf7d' : pct > 0.25 ? '#e0a53d' : '#e05252';
+        ctx.fillRect(p.x - r, p.y + r + 4, r * 2 * pct, 5);
+      } else if (id === 'lamp') {
+        // 金色光晕脉动
+        var glow = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, r * 1.8);
+        glow.addColorStop(0, 'rgba(255,215,94,' + (0.28 + 0.1 * Math.sin(this.t * 3)).toFixed(3) + ')');
+        glow.addColorStop(1, 'rgba(255,215,94,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(p.x, p.y, r * 1.8, 0, TAU); ctx.fill();
+      } else if (id === 'spike') {
+        // 尖刺微光
+        ctx.globalAlpha = 0.5 + 0.2 * Math.sin(this.t * 4);
+        ctx.fillStyle = st.color;
+        ctx.beginPath(); ctx.arc(p.x, p.y, r + 3, 0, TAU); ctx.fill();
+        ctx.globalAlpha = 1;
+      } else if (id === 'medkit') {
+        // 急救包红绿十字微光
+        var mg = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, r * 1.7);
+        mg.addColorStop(0, 'rgba(125,255,154,' + (0.25 + 0.1 * Math.sin(this.t * 3)).toFixed(3) + ')');
+        mg.addColorStop(1, 'rgba(125,255,154,0)');
+        ctx.fillStyle = mg;
+        ctx.beginPath(); ctx.arc(p.x, p.y, r * 1.7, 0, TAU); ctx.fill();
+      }
+    }
   };
 
   P._drawGhost = function (ctx, imgs, sp) {
@@ -909,42 +1011,38 @@
 
     var fs1 = Math.round(this.hudH * 0.36), fs2 = Math.round(this.hudH * 0.22);
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    // 左：波次
+    // 左：波次（只留数字感，去掉"第/波"长句）
     ctx.fillStyle = '#e8e2ff';
     ctx.font = 'bold ' + fs1 + 'px "PingFang SC",sans-serif';
-    ctx.fillText('第 ' + (snap ? snap.wave : 0) + ' 波', 12, this.hudH * 0.42);
-    // 左下：状态
+    ctx.fillText('W' + (snap ? snap.wave : 0), 12, this.hudH * 0.42);
+    // 左下：状态（图标化，尽量短）
     var status, color;
     if (!snap) { status = ''; color = '#9a92b8'; }
-    else if (snap.defeated) { status = '大门失守！'; color = '#ff5e7a'; }
+    else if (snap.defeated) { status = '🚪 破'; color = '#ff5e7a'; }
     else if (snap.ghosts.length > 0) {
       var bossAlive = snap.ghosts.some(function (g) { return g.boss; });
-      status = '战斗中 · 剩 ' + snap.ghosts.length + ' 只' + (bossAlive ? ' · BOSS' : '');
+      status = '⚔' + snap.ghosts.length + (bossAlive ? ' 💀' : '');
       color = bossAlive ? '#ff7a94' : '#ffd75e';
     } else {
-      status = '下一波 ' + fmtDur(snap.nextWaveIn) + (snap.nextIsBoss ? ' · BOSS将至' : '') + (snap.threatDanger ? ' · 危险!' : '');
+      status = '⏳' + fmtDur(snap.nextWaveIn) + (snap.threatDanger ? ' ⚠' : (snap.nextIsBoss ? ' 💀' : ''));
       color = snap.threatDanger || snap.nextIsBoss ? '#ff9a9a' : '#9a92b8';
     }
     ctx.fillStyle = color;
     ctx.font = fs2 + 'px "PingFang SC",sans-serif';
     ctx.fillText(status, 12, this.hudH * 0.78);
 
-    // 右：门耐久条 + 防御等级
+    // 右：门耐久条 + 等级（删掉炮塔行——炮塔自带 Lv 角标）
     if (snap) {
       var bw = Math.min(150, W * 0.19), bx = W - bw - 12, by = this.hudH * 0.3;
       ctx.fillStyle = 'rgba(255,255,255,0.5)';
       ctx.font = (fs2 - 2) + 'px "PingFang SC",sans-serif';
       ctx.textAlign = 'right';
-      ctx.fillText('大门 Lv' + snap.doorLevel, bx + bw, by - 8);
+      ctx.fillText('🚪' + snap.doorLevel, bx + bw, by - 8);
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       ctx.fillRect(bx, by, bw, 8);
       var pct = clamp(snap.doorHp / snap.doorMaxHp, 0, 1);
       ctx.fillStyle = pct > 0.5 ? '#4caf7d' : pct > 0.25 ? '#e0a53d' : '#e05252';
       ctx.fillRect(bx, by, bw * pct, 8);
-      ctx.textAlign = 'right';
-      ctx.fillStyle = '#9a92b8';
-      ctx.font = (fs2 - 3) + 'px "PingFang SC",sans-serif';
-      ctx.fillText('炮塔 Lv' + snap.turretLevel, bx + bw, by + 18);
     }
   };
 
