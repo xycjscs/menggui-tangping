@@ -94,6 +94,7 @@
   function BattleView(opts) {
     opts = opts || {};
     this.formatNum = opts.formatNum || fmtNum;
+    this.touch = !!opts.touch;   // 触控模式：hitTest 热区放大（手机端手指点不准小元素）
     this.W = 750; this.H = 430;
     // 纯视觉临时状态（不进存档）
     this.ghosts = new Map();      // key -> sprite
@@ -493,27 +494,31 @@
    * 顺序即视觉层级（后者画在更上层者优先）
    */
   P.hitTest = function (x, y) {
+    // 触控模式（手机）热区放大 1.85×：设计空间 750 宽缩到手机屏约 375px，
+    // 小元素（炮塔 r22 → 物理 ~5px 半径）手指根本点不准，必须放大
+    var k = this.touch ? 1.85 : 1;
     var tp = this.turretPos;
-    if (Math.hypot(x - tp.x, y - tp.y) < 22) return { type: 'turret' };
+    if (Math.hypot(x - tp.x, y - tp.y) < 22 * k) return { type: 'turret' };
     if (x >= this.wallX - this.wallW / 2 - 8 && x <= this.wallX + this.wallW / 2 + 8 &&
         y >= this.doorTop - 16 && y <= this.doorBot) return { type: 'door' };
     var ap = this.altarPos;
-    if (Math.hypot(x - ap.x, y - ap.y) < 26) return { type: 'altar' };
+    if (Math.hypot(x - ap.x, y - ap.y) < 26 * k) return { type: 'altar' };
     for (var hi = 0; hi < 4; hi++) {
       var hp = this.heroPos(hi);
-      if (Math.hypot(x - hp.x, y - hp.y) < 19) return { type: 'hero', index: hi };
+      if (Math.hypot(x - hp.x, y - hp.y) < 19 * k) return { type: 'hero', index: hi };
     }
     var bw = this.bedCellW * 0.88, bh = bw * 0.6;
     for (var bi = 0; bi < 6; bi++) {
       var bp = this.bedPos(bi);
-      if (x >= bp.x - 4 && x <= bp.x + bw + 4 && y >= bp.y - 6 && y <= bp.y + bh + 6) {
+      var bx = 4 * k, by = 6 * k;
+      if (x >= bp.x - bx && x <= bp.x + bw + bx && y >= bp.y - by && y <= bp.y + bh + by) {
         return { type: 'bed', index: bi };
       }
     }
     // v0.5 道具插槽（优先级最低）
     for (var si = 0; si < this.itemSlots.length; si++) {
       var sp2 = this.itemSlots[si];
-      var rr = this.slotSize * 0.5 + 6;
+      var rr = (this.slotSize * 0.5 + 6) * k;
       if (x >= sp2.x - rr && x <= sp2.x + rr && y >= sp2.y - rr && y <= sp2.y + rr) {
         return { type: 'slot', index: si };
       }
