@@ -75,6 +75,54 @@ const BUILDINGS = {
   }
 };
 
+// ================= v0.5 可放置道具 =================
+// 战场 4 个插槽（宿舍区2 + 门前走廊2），点空槽放置 / 点已占槽拆除。
+// 成本随"该类已放置数量"递增，鼓励搭配而非无脑堆。
+//   barrier 路障   金币  独立 150 屏障HP 替门挨打，耗尽即消失
+//   spike   尖刺   金币  防御 DPS +6（持续）
+//   lamp    招财灯 金币  产量 +2.5 金币/s（持续）
+//   medkit  急救包 灵魂  放置瞬间回门 35% 血（消耗型，用完槽位自动空出）
+const ITEM_SLOT_COUNT = 4;
+const ITEMS = {
+  barrier: {
+    id: 'barrier', name: '路障', icon: '🚧', res: 'coin',
+    baseCost: 120, costGrowth: 1.6,
+    desc: '替大门挨 150 伤害',
+    barrierHp: 150
+  },
+  spike: {
+    id: 'spike', name: '尖刺', icon: '🔱', res: 'coin',
+    baseCost: 200, costGrowth: 1.7,
+    desc: '反击 +6/s',
+    dps: 6
+  },
+  lamp: {
+    id: 'lamp', name: '招财灯', icon: '🏮', res: 'coin',
+    baseCost: 260, costGrowth: 1.7,
+    desc: '产量 +2.5/s',
+    coinPerSec: 2.5
+  },
+  medkit: {
+    id: 'medkit', name: '急救包', icon: '💊', res: 'soul',
+    baseCost: 60, costGrowth: 1.5,
+    desc: '立即回门 35% 血',
+    healPct: 0.35
+  }
+};
+const ITEM_IDS = ['barrier', 'spike', 'lamp', 'medkit'];
+
+/** 该类道具已放置数量 */
+function itemPlacedCount(s, itemId) {
+  const n = (s.itemSlots || []).filter(x => x === itemId).length;
+  return n;
+}
+/** 放置成本（随该类已放数量递增） */
+function itemPlaceCost(s, itemId) {
+  const it = ITEMS[itemId];
+  if (!it) return Infinity;
+  return Math.floor(it.baseCost * Math.pow(it.costGrowth, itemPlacedCount(s, itemId)));
+}
+
 // ================= 英雄定义 =================
 // type: dps(增加防御DPS) / slow(降低鬼对门的伤害，上限50%) / heal(门额外回血%/s)
 const HEROES = [
@@ -242,6 +290,9 @@ function newGame() {
     door: { level: 1, hp: BUILDINGS.door.hpBase + BUILDINGS.door.hpPerLevel },
     turret: { level: 0 },
     altar: { level: 0 },
+    // v0.5 可放置道具（4 插槽 + 屏障HP池）
+    itemSlots: [null, null, null, null],
+    itemBarrierHp: 0,
     // v0.2 英雄
     heroes: HEROES.map(() => ({ unlocked: false, level: 0 })),
     heroDeal: false,         // 英雄折扣广告标记（下次招募/升级 7 折）
@@ -312,7 +363,14 @@ function bedExpPerSec(bed) {
   return b.expPerLevel * Math.pow(b.expMult, bed.level - 1);
 }
 function coinPerSec(s) {
-  return s.beds.reduce((a, b) => a + bedCoinPerSec(b), 0) * altarMult(s) * incomeMult(s);
+  // 床产量 × 祭坛 × 收入加成 + 招财灯（道具，固定 +2.5/盏，不乘祭坛）
+  const bedCps = s.beds.reduce((a, b) => a + bedCoinPerSec(b), 0) * altarMult(s) * incomeMult(s);
+  const lampCps = lampCoinPerSec(s);
+  return bedCps + lampCps;
+}
+/** v0.5 招财灯产量（每盏 +2.5 金币/s） */
+function lampCoinPerSec(s) {
+  return itemPlacedCount(s, 'lamp') * ITEMS.lamp.coinPerSec;
 }
 function expPerSec(s) {
   return s.beds.reduce((a, b) => a + bedExpPerSec(b), 0) * altarMult(s) * incomeMult(s);
@@ -398,7 +456,69 @@ function tryUpgradeHero(s, i) {
 function doorMaxHp(s) { return CURVE.doorMaxHp(s); }
 function doorCounterDps(s) { return CURVE.doorCounterDps(s); }
 function turretDps(s) { return CURVE.turretDps(s); }
-function totalDefendDps(s) { return doorCounterDps(s) + turretDps(s) + heroDpsTotal(s); }
+/** v0.5 尖刺陷阱 DPS（每座 +6） */
+function spikeDps(s) { return itemPlacedCount(s, 'spike') * ITEMS.spike.dps; }
+function totalDefendDps(s) { return doorCounterDps(s) + turretDps(s) + heroDpsTotal(s) + spikeDps(s); }
+
+// ================= v0.5 可放置道具：放置 / 拆除 =================
+/**
+ * 在 slot（0..3）放置 itemId。
+ * 扣本局资源（coin/soul），medkit 立即回门 35% 血（消耗型，槽位随即空出），
+ * barrier 增加屏障 HP 池。返回 {ok, msg?, slot, itemId?}
+ */
+function placeItem(s, slot, itemId) {
+  const it = ITEMS[itemId];
+  if (!it) return { ok: false, msg: '未知道具' };
+  if (!Array.isArray(s.itemSlots) || slot < 0 || slot >= s.itemSlots.length) return { ok: false, msg: '无效插槽' };
+  if (s.itemSlots[slot] !== null) return { ok: false, msg: '该位置已被占用' };
+  const cost = itemPlaceCost(s, itemId);
+  if (it.res === 'coin' && s.coin < cost) return { ok: false, msg: '金币不足' };
+  if (it.res === 'soul' && s.soul < cost) return { ok: false, msg: '灵魂不足' };
+  if (it.res === 'coin') s.coin -= cost; else s.soul -= cost;
+
+  if (itemId === 'medkit') {
+    // 消耗型：立即回门血，槽位不占用
+    const maxHp = doorMaxHp(s);
+    s.door.hp = Math.min(maxHp, s.door.hp + maxHp * it.healPct);
+    return { ok: true, slot, itemId: 'medkit', consumed: true, healed: true };
+  }
+
+  s.itemSlots[slot] = itemId;
+  if (itemId === 'barrier') s.itemBarrierHp = (s.itemBarrierHp || 0) + it.barrierHp;
+  return { ok: true, slot, itemId };
+}
+
+/**
+ * 拆除 slot 的道具（不返还资源）。barrier 会清空屏障 HP 池（多个路障共用一个池）。
+ */
+function removeItem(s, slot) {
+  if (!Array.isArray(s.itemSlots) || slot < 0 || slot >= s.itemSlots.length) return { ok: false, msg: '无效插槽' };
+  const was = s.itemSlots[slot];
+  if (was === null) return { ok: false, msg: '该位置没有道具' };
+  s.itemSlots[slot] = null;
+  if (was === 'barrier' && itemPlacedBarrierCountAfter(s) === 0) {
+    // 没有路障了，清空屏障池
+    s.itemBarrierHp = 0;
+  }
+  return { ok: true, slot, removed: was };
+}
+// 辅助：当前还有几个路障
+function itemPlacedBarrierCountAfter(s) {
+  return (s.itemSlots || []).filter(x => x === 'barrier').length;
+}
+
+/** 插槽信息（UI 用）：{slot, itemId, name, icon, desc, barrierHp, barrierMax} */
+function itemSlotInfo(s, slot) {
+  const id = (s.itemSlots && s.itemSlots[slot]) || null;
+  if (!id) return { slot, itemId: null };
+  const it = ITEMS[id];
+  const info = { slot, itemId: id, name: it.name, icon: it.icon, desc: it.desc };
+  if (id === 'barrier') {
+    info.barrierHp = s.itemBarrierHp || 0;
+    info.barrierMax = itemPlacedCount(s, 'barrier') * ITEMS.barrier.barrierHp;
+  }
+  return info;
+}
 
 /**
  * 评估"下一波是否扛得住"：
@@ -496,7 +616,18 @@ function tick(s, deltaSec) {
       const killTime = dps > 0 ? totalGhostHp / dps : Infinity;
       const effTime = Math.min(step, killTime);
       const dmgTaken = s.ghosts.reduce((a, g) => a + g.dmg, 0) * (1 - slow) * effTime;
-      s.door.hp -= dmgTaken;
+      // v0.5 路障：屏障 HP 池先挨打，耗尽才伤门
+      if (s.itemBarrierHp > 0) {
+        const absorbed = Math.min(s.itemBarrierHp, dmgTaken);
+        s.itemBarrierHp -= absorbed;
+        if (s.itemBarrierHp <= 1e-6) {
+          s.itemBarrierHp = 0;
+          events.push({ type: 'barrier_broken', wave: s.wave });
+        }
+        s.door.hp -= (dmgTaken - absorbed);
+      } else {
+        s.door.hp -= dmgTaken;
+      }
 
       let dmgDealt = dps * step;
       for (const g of s.ghosts) {
@@ -779,6 +910,11 @@ function load(json) {
     if (!s.daily || !s.daily.quests) s.daily = defaultDaily();
     if (!s.achievements) s.achievements = { claimed: {} };
     if (typeof s.bossesKilled !== 'number') s.bossesKilled = 0;
+    // v0.5 道具迁移（老存档兼容）
+    if (!Array.isArray(s.itemSlots) || s.itemSlots.length !== ITEM_SLOT_COUNT) {
+      s.itemSlots = [null, null, null, null];
+    }
+    if (typeof s.itemBarrierHp !== 'number') s.itemBarrierHp = 0;
     dailyRollover(s);
     return s;
   } catch (e) {
@@ -800,6 +936,10 @@ module.exports = {
   heroDpsTotal, heroSlowTotal, heroHealTotal,
   heroUpgradeCost, tryBuyHero, tryUpgradeHero,
   doorMaxHp, doorCounterDps, turretDps, totalDefendDps, nextWaveThreat,
+  // v0.5 可放置道具
+  ITEMS, ITEM_IDS, ITEM_SLOT_COUNT,
+  itemPlaceCost, itemPlacedCount, itemSlotInfo,
+  placeItem, removeItem, spikeDps, lampCoinPerSec,
   // 任务/成就
   dateStr, defaultDaily, dailyRollover, questProgress, claimQuest,
   listAchievements, claimAchievement,
