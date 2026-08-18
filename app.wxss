@@ -1,0 +1,7 @@
+/* 全局样式 */
+page {
+  background: #1a1626;
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #e8e2ff;
+}
+button { font-family: inherit; }

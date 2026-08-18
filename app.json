@@ -1,0 +1,15 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/settings/settings"
+  ],
+  "window": {
+    "navigationBarBackgroundColor": "#1a1626",
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "猛鬼宿舍·躺平发育",
+    "backgroundColor": "#1a1626",
+    "backgroundTextStyle": "dark"
+  },
+  "permission": {},
+  "sitemapLocation": "sitemap.json"
+}

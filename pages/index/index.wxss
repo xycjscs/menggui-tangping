@@ -1,0 +1,170 @@
+/* 主游戏页样式 —— 暗色宿舍主题 */
+.page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #1a1626 0%, #221c33 40%, #2a2140 100%);
+  padding: 20rpx 24rpx 160rpx;
+  box-sizing: border-box;
+}
+
+/* ===== 顶部资源栏 ===== */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  background: rgba(0,0,0,0.35);
+  border-radius: 20rpx;
+  padding: 20rpx 24rpx;
+  border: 2rpx solid rgba(255,255,255,0.08);
+}
+.res { display: flex; align-items: center; gap: 8rpx; }
+.res-ico { width: 44rpx; height: 44rpx; }
+.res-num { font-size: 34rpx; font-weight: 700; color: #ffd75e; font-variant-numeric: tabular-nums; }
+.res-sub { font-size: 22rpx; color: #9a92b8; }
+.expbar {
+  flex: 1; height: 16rpx; background: rgba(0,0,0,0.5);
+  border-radius: 8rpx; overflow: hidden; min-width: 120rpx;
+}
+.expbar-fill { height: 100%; background: linear-gradient(90deg, #7c5cff, #b49aff); transition: width .3s; }
+.gear { width: 48rpx; height: 48rpx; opacity: 0.8; }
+
+/* ===== 波次横幅 ===== */
+.wave-banner {
+  margin-top: 20rpx;
+  background: linear-gradient(90deg, rgba(124,92,255,0.25), rgba(80,50,160,0.25));
+  border: 2rpx solid rgba(150,120,255,0.35);
+  border-radius: 20rpx;
+  padding: 20rpx 24rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+}
+.wave-banner.danger {
+  background: linear-gradient(90deg, rgba(255,80,80,0.3), rgba(160,40,40,0.3));
+  border-color: rgba(255,120,120,0.5);
+  animation: pulse 1s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.7} }
+.wave-left { display: flex; align-items: center; gap: 12rpx; }
+.wave-ghost { width: 56rpx; height: 64rpx; }
+.wave-title { font-size: 32rpx; font-weight: 700; color: #e8e2ff; }
+.wave-right { text-align: right; }
+.wave-next { font-size: 26rpx; color: #ffd75e; display: block; }
+.wave-ghosts { font-size: 22rpx; color: #c0b8e0; }
+.threat-tag {
+  position: absolute; bottom: -28rpx; left: 50%; transform: translateX(-50%);
+  font-size: 20rpx; color: #ff9a9a; white-space: nowrap;
+}
+
+/* ===== 通用 section ===== */
+.section-title {
+  margin: 32rpx 0 16rpx;
+  font-size: 28rpx; font-weight: 700; color: #b8aee8;
+  display: flex; align-items: center; gap: 12rpx;
+}
+.section-title::before { content: ''; width: 8rpx; height: 28rpx; background: #7c5cff; border-radius: 4rpx; }
+
+/* ===== 床网格 ===== */
+.bed-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16rpx; }
+.bed-card {
+  background: rgba(0,0,0,0.3);
+  border: 2rpx solid rgba(255,255,255,0.1);
+  border-radius: 20rpx;
+  padding: 16rpx;
+  display: flex; flex-direction: column; align-items: center; gap: 8rpx;
+}
+.bed-card.locked { opacity: 0.55; border-style: dashed; }
+.bed-img { width: 160rpx; height: 96rpx; }
+.bed-lv { font-size: 26rpx; font-weight: 700; color: #8fe3a0; }
+.bed-lock { font-size: 30rpx; }
+.bed-cps { font-size: 22rpx; color: #9a92b8; }
+
+/* ===== 按钮 ===== */
+.btn-up {
+  margin-top: 8rpx !important;
+  background: linear-gradient(90deg, #5b8def, #7c5cff) !important;
+  color: #fff !important;
+  font-size: 24rpx !important;
+  border-radius: 16rpx !important;
+  padding: 0 24rpx !important;
+  line-height: 56rpx !important;
+  border: none !important;
+  width: 100% !important;
+}
+.btn-up::after { border: none; }
+.btn-up.disabled { background: #443d5e !important; color: #8a80a8 !important; }
+
+/* ===== 防御设施 ===== */
+.def-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16rpx; }
+.def-card {
+  background: rgba(0,0,0,0.3);
+  border: 2rpx solid rgba(255,255,255,0.1);
+  border-radius: 20rpx;
+  padding: 16rpx;
+  display: flex; flex-direction: column; align-items: center; gap: 8rpx;
+}
+.def-card.altar { margin-top: 16rpx; background: rgba(124,92,255,0.12); border-color: rgba(150,120,255,0.3); }
+.def-img { width: 80rpx; height: 80rpx; }
+.def-info { display: flex; flex-direction: column; align-items: center; gap: 4rpx; }
+.def-name { font-size: 26rpx; font-weight: 700; color: #e8e2ff; }
+.def-hp { font-size: 22rpx; color: #9a92b8; }
+.def-dps { font-size: 22rpx; color: #ffd75e; }
+.hpbar {
+  width: 100%; height: 14rpx; background: rgba(0,0,0,0.5);
+  border-radius: 7rpx; overflow: hidden;
+}
+.hpbar-fill { height: 100%; background: linear-gradient(90deg, #4caf7d, #8fe3a0); transition: width .3s; }
+.hpbar-fill.hp-low { background: linear-gradient(90deg, #e05252, #ff9a9a); }
+.soul-btn { background: linear-gradient(90deg, #9b59ff, #c77dff) !important; }
+
+/* ===== 广告福利 ===== */
+.ad-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16rpx; }
+.ad-card {
+  background: linear-gradient(135deg, rgba(255,180,60,0.15), rgba(255,120,60,0.1));
+  border: 2rpx solid rgba(255,180,80,0.4);
+  border-radius: 20rpx;
+  padding: 20rpx;
+  display: flex; flex-direction: column; align-items: center; gap: 6rpx;
+}
+.ad-card.active { border-color: #ffd75e; box-shadow: 0 0 20rpx rgba(255,215,94,0.3); }
+.ad-ico { width: 64rpx; height: 64rpx; }
+.ad-name { font-size: 26rpx; font-weight: 700; color: #ffd75e; }
+.ad-sub { font-size: 20rpx; color: #c0b8e0; text-align: center; }
+
+/* ===== footer ===== */
+.footer { margin-top: 40rpx; text-align: center; font-size: 20rpx; color: #6a6288; }
+
+/* ===== 弹窗 ===== */
+.modal-mask {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center; z-index: 99;
+}
+.modal {
+  width: 600rpx;
+  background: linear-gradient(180deg, #2c2545, #221c33);
+  border: 2rpx solid rgba(150,120,255,0.4);
+  border-radius: 28rpx;
+  padding: 40rpx 32rpx;
+  display: flex; flex-direction: column; align-items: center; gap: 20rpx;
+}
+.modal-title { font-size: 36rpx; font-weight: 700; color: #fff; }
+.modal-title.danger { color: #ff9a9a; }
+.modal-ghost { width: 140rpx; height: 160rpx; }
+.modal-line { font-size: 28rpx; color: #c0b8e0; }
+.modal-warn { font-size: 22rpx; color: #9a92b8; }
+.hl { color: #ffd75e; font-weight: 700; }
+.btn-primary {
+  background: linear-gradient(90deg, #ff9a3d, #ff6b3d) !important;
+  color: #fff !important; font-size: 30rpx !important;
+  border-radius: 20rpx !important; padding: 0 40rpx !important;
+  line-height: 84rpx !important; width: 100% !important; border: none !important;
+}
+.btn-primary::after { border: none; }
+.btn-ghost {
+  background: transparent !important;
+  color: #9a92b8 !important; font-size: 24rpx !important;
+  border: 2rpx solid rgba(255,255,255,0.15) !important;
+  border-radius: 20rpx !important; line-height: 76rpx !important;
+  width: 100% !important;
+}
+.btn-ghost::after { border: none; }

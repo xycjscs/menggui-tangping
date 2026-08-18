@@ -1,0 +1,127 @@
+<view class="page">
+  <!-- 顶部资源栏 -->
+  <view class="topbar">
+    <view class="res">
+      <image class="res-ico" src="/images/icons/coin.png" />
+      <text class="res-num">{{coinText}}</text>
+      <text class="res-sub">+{{cpsText}}/s</text>
+    </view>
+    <view class="res">
+      <image class="res-ico" src="/images/icons/soul.png" />
+      <text class="res-num">{{soulText}}</text>
+      <text class="res-sub">Lv.{{level}}</text>
+    </view>
+    <view class="expbar"><view class="expbar-fill" style="width:{{expPct}}%"></view></view>
+    <image class="gear" src="/images/icons/ui_gear.png" bindtap="onGoSettings" />
+  </view>
+
+  <!-- 猛鬼波次横幅 -->
+  <view class="wave-banner {{threatDanger ? 'danger' : ''}}">
+    <view class="wave-left">
+      <image class="wave-ghost" src="/images/sprites/ghost_1.png" wx:if="{{wave>0}}"/>
+      <text class="wave-title">第 {{wave}} 波猛鬼</text>
+    </view>
+    <view class="wave-right">
+      <text class="wave-next">{{nextWaveText}}</text>
+      <text class="wave-ghosts" wx:if="{{ghostInfo}}">{{ghostInfo}}</text>
+    </view>
+    <text class="threat-tag" wx:if="{{threatDanger}}">危险！建议升级防御</text>
+  </view>
+
+  <!-- 床区 -->
+  <view class="section-title"><text>宿舍 · 躺平床位</text></view>
+  <view class="bed-grid">
+    <view class="bed-card {{bed.unlocked ? '' : 'locked'}}" wx:for="{{beds}}" wx:key="idx">
+      <image class="bed-img" src="/images/sprites/bed.png" />
+      <text class="bed-lv" wx:if="{{item.unlocked}}">Lv.{{item.level}}</text>
+      <text class="bed-lock" wx:else>🔒</text>
+      <text class="bed-cps" wx:if="{{item.unlocked}}">+{{item.cps}}/s</text>
+      <button class="btn-up {{item.canAfford ? '' : 'disabled'}}" bindtap="onUpgradeBed" data-idx="{{item.idx}}">
+        {{item.unlocked ? '升级' : '解锁'}} {{item.costText}}
+      </button>
+    </view>
+  </view>
+
+  <!-- 防御区 -->
+  <view class="section-title"><text>防御设施</text></view>
+  <view class="def-row">
+    <view class="def-card">
+      <image class="def-img" src="/images/tiles/{{door.level>=20?'door_3':door.level>=5?'door_2':'door_1'}}.png" />
+      <view class="def-info">
+        <text class="def-name">大门 Lv.{{door.level}}</text>
+        <text class="def-hp">血 {{door.hpText}}</text>
+        <view class="hpbar"><view class="hpbar-fill {{door.hpPct<35?'hp-low':''}}" style="width:{{door.hpPct}}%"></view></view>
+        <text class="def-dps">反击 {{door.dps}}/s</text>
+      </view>
+      <button class="btn-up {{door.canAfford?'':'disabled'}}" bindtap="onUpgradeDoor">升级 {{door.costText}}</button>
+    </view>
+    <view class="def-card">
+      <image class="def-img" src="/images/icons/turret.png" />
+      <view class="def-info">
+        <text class="def-name">炮塔 Lv.{{turret.level}}</text>
+        <text class="def-dps">伤害 {{turret.dps}}/s</text>
+      </view>
+      <button class="btn-up {{turret.canAfford?'':'disabled'}}" bindtap="onUpgradeTurret">升级 {{turret.costText}}</button>
+    </view>
+  </view>
+
+  <!-- 祭坛 -->
+  <view class="def-card altar">
+    <image class="def-img" src="/images/icons/sword_gold.png" />
+    <view class="def-info">
+      <text class="def-name">灵魂祭坛 Lv.{{altar.level}}</text>
+      <text class="def-dps">全局产量 +{{altar.bonus}}%</text>
+    </view>
+    <button class="btn-up soul-btn {{altar.canAfford?'':'disabled'}}" bindtap="onUpgradeAltar">献祭 {{altar.costText}}</button>
+  </view>
+
+  <!-- 广告福利区 -->
+  <view class="section-title"><text>广告福利</text></view>
+  <view class="ad-grid">
+    <view class="ad-card {{boostActive?'active':''}}" bindtap="onAdCoin">
+      <image class="ad-ico" src="/images/icons/coin.png"/>
+      <text class="ad-name">金币红包</text>
+      <text class="ad-sub">{{adCoins.ok?'看广告领金币':adCoins.text}}</text>
+    </view>
+    <view class="ad-card {{boostActive?'active':''}}" bindtap="onAdBoost">
+      <image class="ad-ico" src="/images/icons/ui_fast.png"/>
+      <text class="ad-name">双倍收益</text>
+      <text class="ad-sub">{{boostActive?boostText:(adBoost.ok?'1小时产量x2':adBoost.text)}}</text>
+    </view>
+    <view class="ad-card" bindtap="onAdDoor">
+      <image class="ad-ico" src="/images/tiles/door_1.png"/>
+      <text class="ad-name">修复大门</text>
+      <text class="ad-sub">{{adDoor.ok?(door.hpPct<40?'门残血可修复':'门还健康'):adDoor.text}}</text>
+    </view>
+    <view class="ad-card" bindtap="onAdWave">
+      <image class="ad-ico" src="/images/icons/ui_ad.png"/>
+      <text class="ad-name">延迟猛鬼</text>
+      <text class="ad-sub">{{adWave.ok?'猛鬼迟到10分钟':adWave.text}}</text>
+    </view>
+  </view>
+
+  <view class="footer">猛鬼宿舍·躺平发育 v0.1.0 · 素材 CC0 (Kenney)</view>
+
+  <!-- 离线收益弹窗 -->
+  <view class="modal-mask" wx:if="{{showOffline}}" bindtap="onOfflineClose">
+    <view class="modal" catchtap="">
+      <text class="modal-title">🌙 离线收益</text>
+      <text class="modal-line">你躺平了 <text class="hl">{{offline.secText}}</text></text>
+      <text class="modal-line">赚得金币 <text class="hl">{{offline.coinText}}</text></text>
+      <text class="modal-warn" wx:if="{{offline.capped}}">（离线收益上限8小时）</text>
+      <button class="btn-primary" bindtap="onOfflineDouble">📺 看广告收益x2</button>
+      <button class="btn-ghost" bindtap="onOfflineClaim">领取</button>
+    </view>
+  </view>
+
+  <!-- 门破弹窗 -->
+  <view class="modal-mask" wx:if="{{showDefeat}}">
+    <view class="modal">
+      <image class="modal-ghost" src="/images/sprites/ghost_4.png" />
+      <text class="modal-title danger">👻 大门被撞破！</text>
+      <text class="modal-line">第 {{defeatWave}} 波猛鬼冲进了宿舍…</text>
+      <button class="btn-primary" bindtap="onRevive">📺 看广告立刻复活</button>
+      <button class="btn-ghost" bindtap="onAcceptDefeat">接受失败（灵魂x0.3，床等级减半）</button>
+    </view>
+  </view>
+</view>

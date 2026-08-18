@@ -1,0 +1,22 @@
+{
+  "description": "猛鬼宿舍·躺平发育 - 放置类小程序",
+  "packOptions": {
+    "ignore": [
+      { "type": "folder", "value": "docs" },
+      { "type": "folder", "value": "tests" }
+    ],
+    "include": []
+  },
+  "setting": {
+    "urlCheck": true,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true
+  },
+  "compileType": "miniprogram",
+  "libVersion": "3.8.0",
+  "appid": "touristappid",
+  "projectname": "menggui-tangping",
+  "condition": {}
+}
