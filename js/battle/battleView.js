@@ -464,6 +464,32 @@
   // ---------- 调试/测试用 ----------
   P.ghostCount = function () { return this.ghosts.size; };
   P.ghostOf = function (key) { return this.ghosts.get(key); };
+
+  /**
+   * 命中检测（设计空间坐标）：返回点中的可交互元素 {type, index?} 或 null
+   * type: bed / door / turret / altar / hero
+   * 顺序即视觉层级（后者画在更上层者优先）
+   */
+  P.hitTest = function (x, y) {
+    var tp = this.turretPos;
+    if (Math.hypot(x - tp.x, y - tp.y) < 22) return { type: 'turret' };
+    if (x >= this.wallX - this.wallW / 2 - 8 && x <= this.wallX + this.wallW / 2 + 8 &&
+        y >= this.doorTop - 16 && y <= this.doorBot) return { type: 'door' };
+    var ap = this.altarPos;
+    if (Math.hypot(x - ap.x, y - ap.y) < 26) return { type: 'altar' };
+    for (var hi = 0; hi < 4; hi++) {
+      var hp = this.heroPos(hi);
+      if (Math.hypot(x - hp.x, y - hp.y) < 19) return { type: 'hero', index: hi };
+    }
+    var bw = this.bedCellW * 0.88, bh = bw * 0.6;
+    for (var bi = 0; bi < 6; bi++) {
+      var bp = this.bedPos(bi);
+      if (x >= bp.x - 4 && x <= bp.x + bw + 4 && y >= bp.y - 6 && y <= bp.y + bh + 6) {
+        return { type: 'bed', index: bi };
+      }
+    }
+    return null;
+  };
   P.allFinite = function () {
     var ok = true;
     this.ghosts.forEach(function (sp) { if (!isFinite(sp.x) || !isFinite(sp.y)) ok = false; });
