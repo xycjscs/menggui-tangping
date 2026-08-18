@@ -126,6 +126,16 @@ page {
 .tap-stat-v { font-weight: 700; color: #e8e2ff; }
 .tap-menu .btn-primary { width: 100%; font-size: 26rpx; padding: 18rpx; margin-top: 8rpx; }
 .tap-close { width: 100%; margin-top: 12rpx; font-size: 22rpx; padding: 10rpx; }
+/* v0.5 道具插槽选项（2×2 网格） */
+.slot-options { display: flex; flex-wrap: wrap; gap: 12rpx; margin-bottom: 10rpx; }
+.slot-opt { width: calc(50% - 6rpx); box-sizing: border-box; background: rgba(255,255,255,0.06);
+  border: 1rpx solid rgba(180,154,255,0.3); border-radius: 14rpx; padding: 14rpx 6rpx;
+  display: flex; flex-direction: column; align-items: center; gap: 4rpx; }
+.slot-opt:active { background: rgba(124,92,255,0.28); }
+.slot-opt-poor { opacity: 0.45; }
+.slot-opt-ico { font-size: 40rpx; line-height: 1.1; }
+.slot-opt-name { font-size: 22rpx; font-weight: 700; }
+.slot-opt-cost { font-size: 20rpx; color: #ffd75e; }
 
 /* ================= 弹窗 ================= */
 .modal-mask { position: fixed; inset: 0; background: rgba(6,4,12,0.78); display: flex;
