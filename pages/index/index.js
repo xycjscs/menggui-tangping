@@ -24,6 +24,9 @@ function saveMeta(m) { try { wx.setStorageSync(META_KEY, JSON.stringify(m)); } c
 Page({
   data: {
     screen: 'home',
+    // 手机端适配
+    statusBar: 20,
+    canvasH: 214,
     // 首页
     walletCoin: '0', walletSoul: '0',
     levels: [],
@@ -37,6 +40,9 @@ Page({
     coinText: '0', soulText: '0',
     wavesCleared: 0,
     hintHide: false,
+    // v0.6 底部图标状态坞
+    cpsText: '0', dpsText: '0', doorPct: '100', doorLow: false,
+    bonusUsed: false,
     tapMenu: { show: false, x: 0, y: 0, title: '', desc: '', stats: [], action: '', disabled: false },
     // 弹窗
     winModal: { show: false, stars: 0, line: '', coin: 0, soul: 0, hasNext: false },
@@ -52,6 +58,14 @@ Page({
     this.won = false;
     this.tapTarget = null;
     this._toastTimer = null;
+    // 手机端适配：状态栏高度（刘海屏）+ canvas 高度（按 750:430 保比例）
+    try {
+      const info = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync();
+      this.setData({
+        statusBar: info.statusBarHeight || 20,
+        canvasH: Math.round((info.windowWidth || 375) * 430 / 750)
+      });
+    } catch (e) {}
     this.refreshHome();
   },
 
@@ -59,7 +73,18 @@ Page({
     // 进入游戏屏时才启动战场 canvas 渲染
   },
   onUnload() { battle.stop(); },
-  onHide() { this.stopGameLoop(); },
+  onHide() {
+    // 切后台：停逻辑循环 + 停渲染（省电，rAF 在后台会空转）
+    this.stopGameLoop();
+    battle.stop();
+  },
+  onShow() {
+    // 从后台回来：若还在对局中且未结束，恢复逻辑循环与战场渲染
+    if (this.data.screen === 'game' && this.s && !this.won) {
+      this.startGameLoop();
+      battle.start(this, () => this.s, () => this.s);
+    }
+  },
 
   // ============ 屏幕路由 ============
   goHome() {
@@ -126,6 +151,7 @@ Page({
     if (!lv || !LVL.isUnlocked(this.meta.progress, lv.id)) { this.toast('先通关上一关'); return; }
     const wantElite = this.eliteUsed;
     this.currentLevel = lv; this.revivesUsed = 0; this.won = false;
+    this.bonusUsed = false;   // 每局重置游戏内快捷奖励
     const s = core.newGame();
     s.coin = lv.init.coin; s.soul = lv.init.soul;
     s.door = { level: lv.init.door, hp: core.doorMaxHp(s) };
@@ -148,9 +174,10 @@ Page({
     this.s = s;
     saveMeta(this.meta);
     this.startGameLoop();
-    this.setData({ screen: 'game', hintHide: false });
+    this.setData({ screen: 'game', hintHide: false, bonusUsed: false });
     battle.start(this, () => s, () => this.s);
     this.refreshGameTop();
+    this.vibrate();
     this.toast('第 ' + lv.id + ' 关 · 清除 ' + lv.wave + ' 波通关');
     const h = setTimeout(() => this.setData({ hintHide: true }), 5000);
     this._hintTimer = h;
@@ -174,18 +201,29 @@ Page({
   stopGameLoop() { if (this._loop) { clearInterval(this._loop); this._loop = null; } },
 
   onEvent(e) {
-    if (e.type === 'wave_start') this.toast(e.boss ? '⚠️ 第 ' + e.wave + ' 波 BOSS 来袭！' : '第 ' + e.wave + ' 波猛鬼来袭');
+    if (e.type === 'wave_start') {
+      this.toast(e.boss ? '⚠️ 第 ' + e.wave + ' 波 BOSS 来袭！' : '第 ' + e.wave + ' 波猛鬼来袭');
+      if (e.boss) this.vibrateWin();   // Boss 波：强一点的震动提醒
+    }
     if (e.type === 'boss_killed') this.toast('🏆 Boss 被击杀！');
     if (e.type === 'defeat') this.setData({ defeatModal: { show: true, text: '第 ' + e.wave + ' 波猛鬼冲进了宿舍…' } });
+    if (e.type === 'defeat') this.vibrateWin();
   },
 
   refreshGameTop() {
     const s = this.s;
     if (!s || !this.currentLevel) return;
+    const max = core.doorMaxHp(s);
+    const pct = Math.max(0, Math.min(100, Math.floor(s.door.hp / max * 100)));
     this.setData({
       coinText: formatNum(Math.floor(s.coin)),
       soulText: formatNum(Math.floor(s.soul)),
-      wavesCleared: Math.min(s.wavesCleared, this.currentLevel.wave)
+      wavesCleared: Math.min(s.wavesCleared, this.currentLevel.wave),
+      // v0.6 底部图标状态坞
+      cpsText: formatNum(Math.floor(core.coinPerSec(s) * 10) / 10),
+      dpsText: formatNum(Math.floor(core.totalDefendDps(s) * 10) / 10),
+      doorPct: '' + pct,
+      doorLow: pct < 40
     });
   },
 
@@ -201,6 +239,7 @@ Page({
     this.meta._won = this.meta._won || {}; this.meta._won[lv.id] = true;
     saveMeta(this.meta);
     this.stopGameLoop();
+    this.vibrateWin();   // 通关：强震动庆祝
     this.setData({
       winModal: {
         show: true, stars, line: '复活 ' + this.revivesUsed + ' 次 · ' + (first ? '首次通关' : '再次挑战'),
@@ -391,6 +430,51 @@ Page({
       this.meta.soul += bonus; saveMeta(this.meta);
       this.toast('钱包灵魂 +' + formatNum(bonus)); this.refreshHome();
     });
+  },
+
+  // ============ 手机端：震动 / 分享 / 游戏内快捷奖励 ============
+  vibrate() {
+    try {
+      // light 强度：点击/升级/波次反馈；success 用于通关
+      if (wx.vibrateShort) wx.vibrateShort({ type: 'light', fail: () => {} });
+    } catch (e) {}
+  },
+  vibrateWin() {
+    try { if (wx.vibrateShort) wx.vibrateShort({ type: 'medium', fail: () => {} }); } catch (e) {}
+  },
+  // 微信好友分享（右上角菜单 + 主动触发）
+  onShareAppMessage() {
+    return {
+      title: '猛鬼宿舍·躺平发育 — 来宿舍躺平发育，猛鬼来了也不慌！',
+      path: '/pages/index/index'
+    };
+  },
+  // 朋友圈分享（iOS 16.4+ / 安卓支持）
+  onShareTimeline() {
+    return { title: '猛鬼宿舍·躺平发育' };
+  },
+  // 游戏内快捷奖励：看广告本局金币 +50%（每局 1 次）
+  onGameBonus() {
+    if (this.bonusUsed) { this.toast('本局已用'); return; }
+    const s = this.s;
+    if (!s) return;
+    ad.playRewardAd('game_bonus', () => {
+      const gain = Math.floor(s.coin * 0.5) + 200;
+      s.coin += gain;
+      this.bonusUsed = true;
+      this.vibrateWin();
+      this.setData({ bonusUsed: true });
+      this.refreshGameTop();
+      this.toast('本局金币 +' + formatNum(gain));
+    });
+  },
+  // 点状态坞（非奖励格）：轻震动 + 门耐久低时弹门升级菜单（手机单手快捷路径）
+  onDockStat() {
+    this.vibrate();
+    if (this.data.doorLow && battle.view) {
+      this.tapTarget = { type: 'door' };
+      this.showTapMenu({ type: 'door' });
+    }
   },
 
   toast(msg) {
