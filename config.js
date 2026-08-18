@@ -3,7 +3,7 @@
  * 广告位 ID 在微信开发者工具「流量主」开通后替换 AD_DEBUG=false 并填入真实 adUnitId
  */
 module.exports = {
-  VERSION: '0.4.0',
+  VERSION: '0.5.0',
   SAVE_KEY: 'menggui_tangping_save_v1',
 
   // 广告开关：AD_DEBUG=true 时模拟广告（开发/内测用），上线前改为 false
