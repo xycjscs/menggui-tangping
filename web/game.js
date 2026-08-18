@@ -1,27 +1,19 @@
 /**
- * 猛鬼宿舍·躺平发育 —— Web 试玩版控制器
- * 直接复用小程序核心 js/core/gameCore.js（同一份数值逻辑，零分叉）
+ * 猛鬼宿舍·躺平发育 —— Web 试玩版控制器 v0.4（三屏流程）
+ *  首页（关卡选择/奖励/长效设置）→ 进入页（关卡详情+支援）→ 游戏（战场为主，点哪里弹哪里）
+ * 复用 js/core/gameCore.js（数值零分叉）+ js/battle/battleView.js（战场）+ js/levels.js（关卡）
  * 广告为 3 秒倒计时模拟（Web 无真实广告位）
  */
 (function () {
   'use strict';
-  // 惰性绑定核心模块：bootstrap.js 是异步 fetch 加载 gameCore.js 的，
-  // 本脚本解析时 window.core 还不存在，必须在 init 前拿到引用
-  let core = null;
+  let core = null, LVL = null;
   let formatNum = null, formatDuration = null;
   function bindModules() {
     core = window.core;
+    LVL = window.MGLLevels;
     formatNum = window.num.formatNum;
     formatDuration = window.num.formatDuration;
   }
-  // 调试钩子（web 试玩版专用）：供自动测试/手动观察快进虚拟时间
-  // 注意：state 是引用，测试脚本可修改 nextWaveAt/coin/wave 等字段
-  window.__game = {
-    get state() { return s; },
-    get core() { return core; },
-    get battle() { return battle; }
-  };
-  const SAVE_KEY = 'menggui_tangping_save_web_v1';
 
   const $ = id => document.getElementById(id);
   const el = (tag, cls, text) => {
@@ -31,57 +23,197 @@
     return e;
   };
 
-  let s = null;
-  let pendingOffline = null;
-  let toastTimer = null;
-  let adTimer = null;
+  // ============ 持久化（长效数据：钱包 / 关卡进度 / 设置）============
+  const META_KEY = 'menggui_tangping_meta_v1';
+  let meta = {
+    coin: 0, soul: 0,                 // 钱包（跨关卡累计）
+    progress: { unlocked: 1, stars: {} },  // 关卡进度
+    settings: { resetAt: 0 },
+    dailyBonusDate: ''
+  };
+  function saveMeta() { try { localStorage.setItem(META_KEY, JSON.stringify(meta)); } catch (e) {} }
+  function loadMeta() {
+    try {
+      const raw = localStorage.getItem(META_KEY);
+      if (raw) meta = Object.assign(meta, JSON.parse(raw));
+    } catch (e) { /* 坏档用默认 */ }
+  }
+
+  // ============ 运行时 ============
+  let s = null;            // 当前局 core 状态
+  let currentLevel = null; // 当前关卡定义
+  let supportPick = 'coin';// 入场支援
+  let eliteUsed = false;   // 本局是否买精锐支援
+  let revivesUsed = 0;     // 本局复活次数（定星级）
+  let won = false;
+  let battle = null, battleImgs = {};
   let loopTimer = null;
+  let toastTimer = null, adTimer = null;
+  let tapTarget = null;    // 当前打开的点触菜单目标 {type,index}
 
-  // ============ 2D 战场（v0.3）============
-  let battle = null;          // BattleView 实例
-  let battleImgs = {};        // 预加载素材 {key: HTMLImageElement}
   const BATTLE_IMGS = [
-    ['floor', '../images/tiles/floor_wood.png'],
-    ['brick', '../images/tiles/brick.png'],
-    ['bed', '../images/sprites/bed.png'],
-    ['ghost1', '../images/sprites/ghost_1.png'],
-    ['ghost2', '../images/sprites/ghost_2.png'],
-    ['ghost3', '../images/sprites/ghost_3.png'],
-    ['boss', '../images/sprites/ghost_4.png'],
-    ['door1', '../images/tiles/door_1.png'],
-    ['door2', '../images/tiles/door_2.png'],
-    ['door3', '../images/tiles/door_3.png'],
-    ['coin', '../images/icons/coin.png'],
-    ['soul', '../images/icons/soul.png'],
-    ['knight', '../images/icons/sword_gold.png'],
-    ['archer', '../images/icons/sword_green.png'],
-    ['mage', '../images/icons/sword_purple.png'],
-    ['priest', '../images/icons/sword_orange.png']
+    ['floor', '../images/tiles/floor_wood.png'], ['brick', '../images/tiles/brick.png'],
+    ['bed', '../images/sprites/bed.png'], ['ghost1', '../images/sprites/ghost_1.png'],
+    ['ghost2', '../images/sprites/ghost_2.png'], ['ghost3', '../images/sprites/ghost_3.png'],
+    ['boss', '../images/sprites/ghost_4.png'], ['door1', '../images/tiles/door_1.png'],
+    ['door2', '../images/tiles/door_2.png'], ['door3', '../images/tiles/door_3.png'],
+    ['coin', '../images/icons/coin.png'], ['soul', '../images/icons/soul.png'],
+    ['knight', '../images/icons/sword_gold.png'], ['archer', '../images/icons/sword_green.png'],
+    ['mage', '../images/icons/sword_purple.png'], ['priest', '../images/icons/sword_orange.png']
   ];
-
   function preloadBattleImages() {
     return Promise.all(BATTLE_IMGS.map(p => new Promise(res => {
       const img = new Image();
       img.onload = () => { battleImgs[p[0]] = img; res(); };
-      img.onerror = () => res();   // 素材缺失时降级为程序化绘制
+      img.onerror = () => res();
       img.src = p[1];
     })));
   }
 
+  // ============ 调试钩子 ============
+  window.__game = {
+    get state() { return s; }, get core() { return core; },
+    get battle() { return battle; }, get meta() { return meta; },
+    forceWin() { if (s && currentLevel) s.wave = currentLevel.wave; },
+    startLevel(id) { startLevel(id); }
+  };
+
+  // ============ 屏幕路由 ============
+  function showScreen(name) {
+    ['Home', 'Entry', 'Game'].forEach(n => {
+      $('screen' + n).style.display = (n.toLowerCase() === name) ? '' : 'none';
+    });
+  }
+  function goHome() { closeTapMenu(); stopBattleLoop(); showScreen('home'); refreshHome(); }
+  function goEntry() { refreshEntry(); showScreen('entry'); }
+
+  // ============ 首页 ============
+  function refreshHome() {
+    $('wCoin').textContent = formatNum(Math.floor(meta.coin));
+    $('wSoul').textContent = formatNum(Math.floor(meta.soul));
+    // 关卡网格
+    const grid = $('levelGrid'); grid.innerHTML = '';
+    LVL.LEVELS.forEach(lv => {
+      const unlocked = LVL.isUnlocked(meta.progress, lv.id);
+      const stars = LVL.bestStars(meta.progress, lv.id);
+      const card = el('div', 'level-card' + (unlocked ? '' : ' locked') + (stars ? ' done' : ''));
+      const idEl = el('div', 'level-id', '第 ' + lv.id + ' 关');
+      const nm = el('div', 'level-name', lv.name);
+      const sub = el('div', 'level-sub', lv.sub);
+      const st = el('div', 'level-stars');
+      for (let i = 0; i < 3; i++) st.appendChild(el('span', 'star' + (i < stars ? ' on' : ''), i < stars ? '★' : '☆'));
+      const lock = unlocked ? null : el('div', 'level-lock', '🔒 通关上一关解锁');
+      card.append(idEl, nm, sub, st);
+      if (lock) card.appendChild(lock);
+      if (unlocked) card.onclick = () => openEntry(lv);
+      grid.appendChild(card);
+    });
+  }
+  function openEntry(lv) {
+    currentLevel = lv; supportPick = 'coin'; eliteUsed = false;
+    buildEntry(); showScreen('entry');
+  }
+  function buildEntry() {
+    const lv = currentLevel;
+    $('entryId').textContent = '关卡 ' + lv.id;
+    $('entryName').textContent = lv.name;
+    $('entrySub').textContent = lv.sub;
+    $('entryGoal').textContent = lv.wave;
+    const stars = LVL.bestStars(meta.progress, lv.id);
+    const se = $('entryStars'); se.innerHTML = '';
+    for (let i = 0; i < 3; i++) se.appendChild(el('span', 'star big' + (i < stars ? ' on' : ''), i < stars ? '★' : '☆'));
+    // 初始配置
+    const init = $('entryInit'); init.innerHTML = '';
+    const heroNames = lv.init.heroes.map(i => core.HEROES[i].name).join('、');
+    init.append(
+      el('span', 'init-chip', '💰 ' + formatNum(lv.init.coin)),
+      el('span', 'init-chip', '🏚 大门 Lv.' + lv.init.door),
+      el('span', 'init-chip', '🗼 炮塔 Lv.' + lv.init.turret),
+      el('span', 'init-chip', '🛏 ×' + lv.init.beds),
+      lv.init.soul > 0 ? el('span', 'init-chip', '👻 ' + formatNum(lv.init.soul)) : document.createDocumentFragment(),
+      heroNames ? el('span', 'init-chip', '⚔ ' + heroNames) : document.createDocumentFragment()
+    );
+    // 支援
+    const row = $('supportRow'); row.innerHTML = '';
+    LVL.SUPPORT_DEFS.forEach(sf => {
+      const c = el('div', 'support-card' + (sf.kind === supportPick ? ' picked' : ''));
+      c.append(
+        el('img', 'support-ico', ''),
+        el('div', 'support-name', sf.name),
+        el('div', 'support-desc', sf.desc)
+      );
+      c.querySelector('img').src = '../images/' + sf.icoDir + '/' + sf.icon;
+      c.onclick = () => { supportPick = sf.kind; buildEntry(); };
+      row.appendChild(c);
+    });
+    // 精锐支援
+    const ef = LVL.eliteSupport(lv);
+    $('eliteInfo').innerHTML = '';
+    $('eliteInfo').append(
+      el('span', 'elite-cost', '💰 ' + formatNum(ef.cost.coin)),
+      el('span', 'elite-gain', '开局 +' + formatNum(ef.gain.coin) + ' 金币 / +' + formatNum(ef.gain.soul) + ' 灵魂')
+    );
+  }
+
+  // ============ 开始一局 ============
+  function startLevel(id) {
+    const lv = LVL.getLevel(id);
+    if (!lv) return;
+    if (!LVL.isUnlocked(meta.progress, lv.id)) { toast('先通关上一关'); return; }
+    const wantElite = eliteUsed;      // 先读，再重置
+    currentLevel = lv; supportPick = 'coin'; eliteUsed = false; revivesUsed = 0; won = false;
+    // 构建 core 状态（从 newGame 再按关卡配置覆盖）
+    s = core.newGame();
+    s.coin = lv.init.coin;
+    s.soul = lv.init.soul;
+    s.door = { level: lv.init.door, hp: core.doorMaxHp(s) };
+    s.turret = { level: lv.init.turret };
+    s.altar = { level: lv.init.altar };
+    for (let i = 0; i < core.MAX_BEDS; i++) {
+      s.beds[i] = (i < lv.init.beds) ? { level: 1, unlocked: true } : { level: 0, unlocked: false };
+    }
+    s.heroes = core.HEROES.map(() => ({ unlocked: false, level: 0 }));
+    lv.init.heroes.forEach(i => { s.heroes[i] = { unlocked: true, level: 1 }; });
+    // 入场支援
+    const sup = LVL.supportEffect(lv, supportPick);
+    s.coin += sup.coin || 0; s.soul += sup.soul || 0;
+    if (sup.door) { s.door.level += sup.door; s.door.hp = core.doorMaxHp(s); }
+    // 精锐支援（进入页勾选过则生效，钱包扣费）
+    if (wantElite) {
+      const ef = LVL.eliteSupport(lv);
+      s.coin += ef.gain.coin; s.soul += ef.gain.soul;
+      meta.coin -= ef.cost.coin;
+    }
+    s.time = 0; s.nextWaveAt = 30; s.ghosts = [];
+    saveMeta();
+    setupBattle();
+    showScreen('game');
+    if (!loopTimer) loopTimer = setInterval(tickOnce, 1000);
+    refreshGameTop();
+    toast('第 ' + lv.id + ' 关 · ' + lv.name + '：清除 ' + lv.wave + ' 波即可通关');
+  }
+
+  // ============ 战场 ============
+  let battleLoopStarted = false;   // rAF 循环只启动一次（进多关不重复）
   function setupBattle() {
+    if (battle) { battle.reset(); }
+    if (!battle) {
+      const cv = $('battleCanvas');
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      cv.width = 750 * dpr; cv.height = 430 * dpr;
+      cv._dpr = dpr; cv._ctx = cv.getContext('2d');
+      battle = new window.BattleView.BattleView({ formatNum: n => formatNum(n) });
+      battle.resize(750, 430);
+    }
+    battle.reset();
+    if (battleLoopStarted) return;
+    battleLoopStarted = true;
     const cv = $('battleCanvas');
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    cv.width = 750 * dpr;
-    cv.height = 430 * dpr;
-    cv._dpr = dpr;
-    cv._ctx = cv.getContext('2d');
-    battle = new window.BattleView.BattleView({ formatNum: n => formatNum(n) });
-    battle.resize(750, 430);
     let last = performance.now();
     (function loop(now) {
       const dt = Math.min(0.1, Math.max(0.001, (now - last) / 1000));
       last = now;
-      if (s && !document.hidden) {
+      if (s && !document.hidden && $('screenGame').style.display !== 'none') {
         battle.frame(window.BattleView.makeSnapshot(core, s), dt);
         const ctx = cv._ctx;
         ctx.setTransform(cv._dpr, 0, 0, cv._dpr, 0, 0);
@@ -91,298 +223,262 @@
       requestAnimationFrame(loop);
     })(last);
   }
+  function stopBattleLoop() { if (loopTimer) { clearInterval(loopTimer); loopTimer = null; } }
 
-  // ============ 存档 ============
-  function save() {
-    if (!s) return;
-    try { localStorage.setItem(SAVE_KEY, core.save(s)); } catch (e) { /* 忽略 */ }
-  }
-  function loadSave() {
-    try {
-      const raw = localStorage.getItem(SAVE_KEY);
-      return raw ? core.load(raw) : null;
-    } catch (e) { return null; }
-  }
-
-  function init() {
-    bindModules();
-    s = loadSave();
-    if (s) {
-      const off = core.computeOffline(s, Date.now() / 1000);
-      if (off.seconds >= 30) {
-        pendingOffline = off;
-        showOffline();
-      } else {
-        s.lastSave = Date.now();
-      }
-    } else {
-      s = core.newGame();
-      save();
-      toast('欢迎来到猛鬼宿舍！躺平睡觉赚金币，挡住猛鬼~');
-    }
-    buildStaticUI();
-    loopTimer = setInterval(tickOnce, 1000);
-    // v0.3：素材预加载完成后启动战场渲染
-    preloadBattleImages().finally(setupBattle);
-    document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
-    window.addEventListener('beforeunload', save);
-    refresh();
-  }
-
+  // ============ tick ============
   function tickOnce() {
-    if (!s) return;
+    if (!s || won) return;
     const events = core.tick(s, 1);
-    if (events.length) {
-      for (const e of events) onEvent(e);
-      if (events.some(e => ['defeat', 'wave_cleared', 'first_kill', 'boss_killed'].includes(e.type))) save();
+    for (const e of events) onEvent(e);
+    refreshGameTop();
+    if (tapTarget) updateTapStats(); // 菜单开着就同步数字
+    // 胜利判定：清完目标波
+    if (!won && currentLevel && s.wavesCleared >= currentLevel.wave) {
+      won = true; onWin();
     }
-    refresh();
   }
-
   function onEvent(e) {
     if (e.type === 'wave_start') {
-      toast(e.boss ? '⚠️ 第 ' + e.wave + ' 波 BOSS 来袭！' : '第 ' + e.wave + ' 波猛鬼来袭！(' + e.ghostCount + '只)');
+      toast(e.boss ? '⚠️ 第 ' + e.wave + ' 波 BOSS 来袭！' : '第 ' + e.wave + ' 波猛鬼来袭（剩 ' + (currentLevel.wave - e.wave + 1) + ' 波）');
     }
-    if (e.type === 'boss_killed') toast('🏆 Boss 被击杀！灵魂大增！');
-    if (e.type === 'wave_cleared') toast((e.boss ? 'BOSS 波清除！' : '第 ' + e.wave + ' 波清除！') + ' 灵魂+' + e.bonus);
+    if (e.type === 'boss_killed') toast('🏆 Boss 被击杀！');
     if (e.type === 'defeat') {
       $('defeatWaveText').textContent = '第 ' + e.wave + ' 波猛鬼冲进了宿舍…';
       $('defeatModal').style.display = 'flex';
     }
   }
 
-  function toast(msg) {
-    const t = $('toast');
-    t.textContent = msg;
-    t.style.display = 'block';
-    if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { t.style.display = 'none'; }, 2200);
+  // ============ 胜利 / 失败 ============
+  function onWin() {
+    const lv = currentLevel;
+    const stars = LVL.starsForRevives(revivesUsed);
+    // 进度
+    if (!meta.progress.stars[lv.id] || stars > meta.progress.stars[lv.id]) meta.progress.stars[lv.id] = stars;
+    meta.progress.unlocked = Math.max(meta.progress.unlocked, lv.id);
+    if (lv.id === 8) meta.progress.unlocked = 8;
+    // 奖励进钱包（首次通关才给全额，重复挑战给 30%）
+    const first = !meta._won || !(meta._won[lv.id]);
+    const rw = first ? lv.reward : { coin: Math.floor(lv.reward.coin * 0.3), soul: Math.floor(lv.reward.soul * 0.3) };
+    meta.coin += rw.coin; meta.soul += rw.soul;
+    meta._won = meta._won || {}; meta._won[lv.id] = true;
+    saveMeta();
+    // UI
+    const ws = $('winStars'); ws.innerHTML = '';
+    for (let i = 0; i < 3; i++) ws.appendChild(el('span', 'win-star' + (i < stars ? ' on' : ''), i < stars ? '★' : '☆'));
+    $('winLine').textContent = '复活 ' + revivesUsed + ' 次 · ' + (first ? '首次通关' : '再次挑战');
+    $('winReward').innerHTML = '';
+    $('winReward').append(
+      el('span', 'rw-chip', '💰 +' + formatNum(rw.coin)),
+      el('span', 'rw-chip', '👻 +' + formatNum(rw.soul))
+    );
+    $('winNext').style.display = lv.id < LVL.LEVELS.length ? '' : 'none';
+    $('winModal').style.display = 'flex';
+  }
+  function onDefeatChoice() {
+    // 认输
+    $('defeatModal').style.display = 'none';
+    toast('本局结束 · 返回调整支援再战');
+    goHome();
+  }
+
+  // ============ 点触菜单 ============
+  function canvasPoint(evt) {
+    const cv = $('battleCanvas');
+    const r = cv.getBoundingClientRect();
+    return { x: (evt.clientX - r.left) / r.width * 750, y: (evt.clientY - r.top) / r.height * 430 };
+  }
+  function onCanvasTap(evt) {
+    if (!battle || !s) return;
+    const p = canvasPoint(evt);
+    const hit = battle.hitTest(p.x, p.y);
+    if (!hit) { closeTapMenu(); return; }
+    tapTarget = hit;
+    showTapMenu(hit);
+  }
+  function showTapMenu(hit) {
+    const m = $('tapMenu');
+    $('tapTitle').textContent = '';
+    $('tapDesc').textContent = '';
+    $('tapStats').innerHTML = '';
+    let actionText = '', actionFn = null, disabled = false;
+
+    if (hit.type === 'bed') {
+      const b = s.beds[hit.index];
+      const cost = b.unlocked ? core.bedCost(s, hit.index) : core.unlockBedCost(s, hit.index);
+      const can = s.coin >= cost;
+      $('tapTitle').textContent = '床 ' + (hit.index + 1) + (b.unlocked ? ' · Lv.' + b.level : '（未解锁）');
+      $('tapDesc').textContent = b.unlocked ? '躺平者自动产金币/经验' : '解锁后开始产金币';
+      addStat('产量', b.unlocked ? '+' + core.bedCoinPerSec(b).toFixed(1) + '/s' : '—');
+      if (b.unlocked && b.level >= core.BUILDINGS.bed.maxLevel) { $('tapTitle').textContent += ' · 已满级'; disabled = true; }
+      actionText = (b.unlocked ? '升级 ' : '解锁 ') + formatNum(cost) + ' 💰';
+      actionFn = () => {
+        const r = b.unlocked ? core.tryUpgradeBed(s, hit.index) : core.tryUnlockBed(s, hit.index);
+        if (!r.ok) return toast(r.msg);
+        toast(b.unlocked ? '床升到 ' + r.level + ' 级' : '床 ' + (hit.index + 1) + ' 解锁！');
+        showTapMenu(hit);
+      };
+      disabled = disabled || !can;
+    } else if (hit.type === 'door') {
+      const max = core.doorMaxHp(s);
+      const cost = core.doorCost(s);
+      $('tapTitle').textContent = '大门 Lv.' + s.door.level;
+      $('tapDesc').textContent = '抵挡猛鬼攻击 · 升级回满血';
+      addStat('耐久', formatNum(Math.floor(s.door.hp)) + '/' + formatNum(max));
+      addStat('反击', formatNum(core.doorCounterDps(s)) + '/s');
+      if (s.door.level >= core.BUILDINGS.door.maxLevel) { disabled = true; $('tapTitle').textContent += ' · 满级'; }
+      actionText = '升级 ' + formatNum(cost) + ' 💰';
+      actionFn = () => {
+        const r = core.tryUpgradeDoor(s);
+        if (!r.ok) return toast(r.msg);
+        toast('大门升到 ' + r.level + ' 级，已回满血');
+        showTapMenu(hit);
+      };
+      disabled = disabled || s.coin < cost;
+    } else if (hit.type === 'turret') {
+      const cost = core.turretCost(s);
+      $('tapTitle').textContent = '炮塔' + (s.turret.level > 0 ? ' Lv.' + s.turret.level : '（未建造）');
+      $('tapDesc').textContent = '自动索敌，主要输出';
+      addStat('伤害', formatNum(core.turretDps(s)) + '/s');
+      if (s.turret.level >= core.BUILDINGS.turret.maxLevel) { disabled = true; $('tapTitle').textContent += ' · 满级'; }
+      actionText = (s.turret.level > 0 ? '升级 ' : '建造 ') + formatNum(cost) + ' 💰';
+      actionFn = () => {
+        const r = core.tryUpgradeTurret(s);
+        if (!r.ok) return toast(r.msg);
+        toast('炮塔升到 ' + r.level + ' 级');
+        showTapMenu(hit);
+      };
+      disabled = disabled || s.coin < cost;
+    } else if (hit.type === 'altar') {
+      const cost = core.altarCost(s);
+      $('tapTitle').textContent = '灵魂祭坛' + (s.altar.level > 0 ? ' Lv.' + s.altar.level : '（未启用）');
+      $('tapDesc').textContent = '献祭灵魂，全局产量永久 +25%/级';
+      addStat('加成', '+' + Math.floor(s.altar.level * core.BUILDINGS.altar.bonusPerLevel * 100) + '%');
+      if (s.altar.level >= core.BUILDINGS.altar.maxLevel) { disabled = true; $('tapTitle').textContent += ' · 满级'; }
+      actionText = '献祭 ' + formatNum(cost) + ' 👻';
+      actionFn = () => {
+        const r = core.tryUpgradeAltar(s);
+        if (!r.ok) return toast(r.msg);
+        toast('祭坛升到 ' + r.level + ' 级');
+        showTapMenu(hit);
+      };
+      disabled = disabled || s.soul < cost;
+    } else if (hit.type === 'hero') {
+      const h = core.HEROES[hit.index], st = s.heroes[hit.index];
+      const upCost = st.unlocked ? core.heroUpgradeCost(s, hit.index) : h.unlockSoul;
+      const cost = s.heroDeal ? Math.floor(upCost * core.HERO_DEAL_PCT) : upCost;
+      $('tapTitle').textContent = h.name + (st.unlocked ? ' Lv.' + st.level : '（未招募）');
+      $('tapDesc').textContent = h.desc;
+      addStat('类型', h.type === 'dps' ? '攻击' : h.type === 'slow' ? '减伤' : '治疗');
+      if (!st.unlocked) {
+        actionText = '招募 ' + formatNum(cost) + ' 👻';
+        actionFn = () => {
+          if (s.soul < cost) return toast('灵魂不足 (' + cost + ')');
+          const r = core.tryBuyHero(s, hit.index);
+          if (!r.ok) return toast(r.msg);
+          toast('成功招募 ' + h.name + '！');
+          showTapMenu(hit);
+        };
+        disabled = s.soul < cost;
+      } else {
+        if (st.level >= h.maxLevel) { disabled = true; $('tapTitle').textContent += ' · 满级'; }
+        actionText = '升级 ' + formatNum(cost) + ' 💰';
+        actionFn = () => {
+          const r = core.tryUpgradeHero(s, hit.index);
+          if (!r.ok) return toast(r.msg);
+          toast(h.name + ' 升到 ' + r.level + ' 级');
+          showTapMenu(hit);
+        };
+        disabled = disabled || s.coin < cost;
+      }
+    }
+
+    const btn = $('tapAction');
+    btn.textContent = disabled ? (hit.type === 'bed' && s.beds[hit.index] && !s.beds[hit.index].unlocked ? '需金币' : '资源不足') : actionText;
+    btn.classList.toggle('disabled', disabled);
+    btn.onclick = disabled ? () => toast('资源不足') : actionFn;
+
+    $('tapMenuMask').style.display = 'block';
+    positionTapMenu(hit);
+  }
+  function addStat(k, v) {
+    const d = el('div', 'tap-stat');
+    d.append(el('span', 'tap-stat-k', k), el('span', 'tap-stat-v', v));
+    $('tapStats').appendChild(d);
+  }
+  function positionTapMenu(hit) {
+    // 元素设计坐标 → CSS 坐标（贴 stage）
+    const cv = $('battleCanvas');
+    const r = cv.getBoundingClientRect();
+    const sx = r.width / 750, sy = r.height / 430;
+    let cx = 0, cy = 0;
+    if (hit.type === 'bed') { const p = battle.bedPos(hit.index); cx = (p.x + battle.bedCellW * 0.44) * sx; cy = (p.y + battle.bedCellW * 0.26) * sy; }
+    else if (hit.type === 'door') { cx = battle.wallX * sx; cy = 215 * sy; }
+    else if (hit.type === 'turret') { cx = battle.turretPos.x * sx; cy = battle.turretPos.y * sy; }
+    else if (hit.type === 'altar') { cx = battle.altarPos.x * sx; cy = battle.altarPos.y * sy; }
+    else if (hit.type === 'hero') { const p = battle.heroPos(hit.index); cx = p.x * sx; cy = p.y * sy; }
+    const mask = $('tapMenuMask'), m = $('tapMenu');
+    const mw = m.offsetWidth, mh = m.offsetHeight;
+    let left = cx + 16; if (left + mw > r.width - 8) left = cx - mw - 16;
+    left = Math.max(8, Math.min(left, r.width - mw - 8));
+    let top = cy - mh / 2;
+    top = Math.max(8, Math.min(top, r.height - mh - 8));
+    m.style.left = left + 'px'; m.style.top = top + 'px';
+    mask.style.left = r.left + 'px'; mask.style.top = r.top + 'px';
+    mask.style.width = r.width + 'px'; mask.style.height = r.height + 'px';
+  }
+  function updateTapStats() { if (tapTarget && $('tapMenuMask').style.display !== 'none') showTapMenu(tapTarget); }
+  function closeTapMenu() { tapTarget = null; $('tapMenuMask').style.display = 'none'; }
+
+  // ============ 顶部 HUD ============
+  function refreshGameTop() {
+    if (!s || !currentLevel) return;
+    $('gtName').textContent = '关卡 ' + currentLevel.id;
+    $('gtProgress').textContent = Math.min(s.wavesCleared, currentLevel.wave) + '/' + currentLevel.wave + ' 波';
+    $('gtCoin').textContent = formatNum(Math.floor(s.coin));
+    $('gtSoul').textContent = formatNum(Math.floor(s.soul));
   }
 
   // ============ 广告模拟 ============
   function playAd(key, onDone) {
-    const modal = $('adModal');
-    modal.style.display = 'flex';
-    let n = 3;
-    $('adCount').textContent = n;
+    const modal = $('adModal'); modal.style.display = 'flex';
+    let n = 3; $('adCount').textContent = n;
     if (adTimer) clearInterval(adTimer);
     adTimer = setInterval(() => {
       n -= 1;
-      if (n <= 0) {
-        clearInterval(adTimer);
-        adTimer = null;
-        modal.style.display = 'none';
-        onDone();
-      } else {
-        $('adCount').textContent = n;
-      }
+      if (n <= 0) { clearInterval(adTimer); adTimer = null; modal.style.display = 'none'; onDone(); }
+      else $('adCount').textContent = n;
     }, 1000);
   }
-
-  function adState(key) {
-    const c = core.canUseAd(s, key);
-    return { ok: c.ok, text: c.ok ? '' : (c.remain ? formatDuration(c.remain) : (c.msg || '')) };
+  function walletCoinAd() {
+    playAd('wallet_coin', () => {
+      const bonus = Math.max(300, Math.floor(meta.coin * 0.5 + 500));
+      meta.coin += bonus; saveMeta();
+      toast('钱包金币 +' + formatNum(bonus)); refreshHome();
+    });
   }
-
-  function doAd(key, apply) {
-    playAd(key, () => {
-      const r = core.applyAd(s, key, apply);
-      if (r.ok) {
-        core.markAdUsed(s, key);
-        save();
-        if (key === 'coin_bonus') toast('金币 +' + formatNum(r.bonus));
-        if (key === 'income_boost') toast('双倍收益 1 小时！');
-        if (key === 'door_fix') toast('大门已修复');
-        if (key === 'revive') toast('复活成功！');
-        if (key === 'daily_bonus') toast('每日福利：金币+' + formatNum(r.bonus) + ' 灵魂+100');
-        if (key === 'hero_deal') toast('英雄7折券生效！下次购买/升级生效');
-      } else {
-        toast(r.msg || '广告奖励不可用');
-      }
-      refresh();
+  function walletSoulAd() {
+    playAd('wallet_soul', () => {
+      const bonus = Math.max(80, Math.floor(meta.soul * 0.5 + 100));
+      meta.soul += bonus; saveMeta();
+      toast('钱包灵魂 +' + formatNum(bonus)); refreshHome();
+    });
+  }
+  function dailyBonus() {
+    const today = core.dateStr(Date.now());
+    if (meta.dailyBonusDate === today) return toast('今日已领取');
+    playAd('daily_bonus', () => {
+      meta.dailyBonusDate = today;
+      meta.coin += 800; meta.soul += 200; saveMeta();
+      toast('每日福利：金币+800 灵魂+200'); refreshHome();
     });
   }
 
-  // ============ 静态 UI 构建 ============
-  const bedRefs = [], heroRefs = [], questRefs = [], achRefs = [], adRefs = {};
-
-  function buildStaticUI() {
-    // 床
-    const bg = $('bedGrid');
-    for (let i = 0; i < core.MAX_BEDS; i++) {
-      const card = el('div', 'bed-card');
-      const img = el('img', 'bed-img'); img.src = '../images/sprites/bed.png';
-      const lv = el('div', 'bed-lv');
-      const cps = el('div', 'bed-cps');
-      const btn = el('button', 'btn-up');
-      card.append(img, lv, cps, btn);
-      btn.onclick = () => {
-        const st = s.beds[i];
-        let r;
-        if (!st.unlocked) {
-          r = core.tryUnlockBed(s, i);
-          if (r.ok) toast('床 ' + (i + 1) + ' 解锁！'); else toast(r.msg);
-        } else {
-          r = core.tryUpgradeBed(s, i);
-          if (r.ok) toast('床升到 ' + r.level + ' 级'); else toast(r.msg);
-        }
-        if (r.ok) { save(); refresh(); }
-      };
-      bg.appendChild(card);
-      bedRefs.push({ card, lv, cps, btn });
-    }
-    // 英雄
-    const hg = $('heroGrid');
-    core.HEROES.forEach((h, i) => {
-      const card = el('div', 'hero-card');
-      card.setAttribute('role', 'button');
-      const img = el('img', 'hero-img'); img.src = h.icon.replace('/images/', '../images/');
-      const name = el('div', 'hero-name', h.name);
-      const type = el('div', 'hero-type');
-      const desc = el('div', 'hero-desc', h.desc);
-      const btn = el('button', 'hero-btn');
-      card.append(img, name, type, desc, btn);
-      card.onclick = () => onHeroTap(i);
-      hg.appendChild(card);
-      heroRefs.push({ card, type, btn });
-    });
-    // 任务
-    const ql = $('questList');
-    for (let i = 0; i < 3; i++) {
-      const item = el('div', 'quest-item');
-      const info = el('div', 'quest-info');
-      const nm = el('div', 'quest-name');
-      const bar = el('div', 'quest-bar');
-      const fill = el('div', 'quest-fill');
-      bar.appendChild(fill);
-      const prog = el('div', 'quest-progress');
-      const btn = el('button', 'btn-quest');
-      item.append(info, btn);
-      info.append(nm, bar, prog);
-      btn.onclick = () => onQuestClaim(i);
-      ql.appendChild(item);
-      questRefs.push({ item, nm, fill, prog, btn });
-    }
-    // 成就
-    const al = $('achList');
-    core.ACHIEVEMENTS.forEach(a => {
-      const item = el('div', 'ach-item');
-      const info = el('div', 'ach-info');
-      const nm = el('div', 'ach-name');
-      const desc = el('div', 'ach-desc', a.desc + ' · 奖励 ' + a.reward + ' 灵魂');
-      const btn = el('button', 'btn-quest small');
-      item.append(info, btn);
-      info.append(nm, desc);
-      btn.onclick = () => {
-        const r = core.claimAchievement(s, a.id);
-        if (!r.ok) { toast(r.msg); return; }
-        save(); toast('成就达成！灵魂 +' + r.reward); refresh();
-      };
-      al.appendChild(item);
-      achRefs.push({ item, nm, btn, id: a.id });
-    });
-    // 广告卡
-    const ag = $('adGrid');
-    const adDefs = [
-      { key: 'coin_bonus', ico: 'coin.png', icoDir: 'icons', name: '金币红包', desc: '看广告领金币' },
-      { key: 'income_boost', ico: 'ui_fast.png', icoDir: 'icons', name: '双倍收益', desc: '1小时产量x2' },
-      { key: 'door_fix', ico: 'door_1.png', icoDir: 'tiles', name: '修复大门', desc: '门残血可用' },
-      { key: 'wave_delay', ico: 'ui_ad.png', icoDir: 'icons', name: '延迟猛鬼', desc: '猛鬼迟到10分钟' },
-      { key: 'daily_bonus', ico: 'ui_medal1.png', icoDir: 'icons', name: '每日福利', desc: '金币+灵魂 每天1次', cls: 'daily' },
-      { key: 'hero_deal', ico: 'sword_gold.png', icoDir: 'icons', name: '英雄7折', desc: '招募/升级7折' }
-    ];
-    adDefs.forEach(d => {
-      const card = el('div', 'ad-card' + (d.cls ? ' ' + d.cls : ''));
-      card.setAttribute('role', 'button');
-      const img = el('img', 'ad-ico'); img.src = '../images/' + d.icoDir + '/' + d.ico;
-      const nm = el('div', 'ad-name', d.name);
-      const sub = el('div', 'ad-sub', d.desc);
-      card.append(img, nm, sub);
-      card.onclick = () => onAdTap(d.key, sub);
-      ag.appendChild(card);
-      adRefs[d.key] = { card, sub, nm };
-    });
-
-    // 防御设施按钮
-    $('doorBtn').onclick = () => {
-      const r = core.tryUpgradeDoor(s);
-      if (!r.ok) toast(r.msg); else { save(); toast('大门升到 ' + r.level + ' 级，已回满血'); refresh(); }
-    };
-    $('turretBtn').onclick = () => {
-      const r = core.tryUpgradeTurret(s);
-      if (!r.ok) toast(r.msg); else { save(); toast('炮塔升到 ' + r.level + ' 级'); refresh(); }
-    };
-    $('altarBtn').onclick = () => {
-      const r = core.tryUpgradeAltar(s);
-      if (!r.ok) toast(r.msg); else { save(); toast('祭坛升到 ' + r.level + ' 级'); refresh(); }
-    };
-    // 弹窗
-    $('reviveBtn').onclick = () => {
-      playAd('revive', () => {
-        const r = core.applyAd(s, 'revive');
-        if (r.ok) { core.markAdUsed(s, 'revive'); save(); toast('复活成功！'); }
-        else toast(r.msg || '复活失败');
-        $('defeatModal').style.display = 'none';
-        refresh();
-      });
-    };
-    $('acceptBtn').onclick = () => {
-      const r = core.acceptDefeat(s);
-      if (r.ok) { save(); toast('宿舍被攻陷… 重新开始新一轮'); }
-      $('defeatModal').style.display = 'none';
-      refresh();
-    };
-    $('offClaim').onclick = () => settleOffline(false);
-    $('offDouble').onclick = () => {
-      playAd('offline_double', () => settleOffline(true));
-    };
-    $('resetBtn').onclick = () => {
-      showConfirm('确认重置？', '所有进度将清空，无法恢复！', () => {
-        localStorage.removeItem(SAVE_KEY);
-        s = core.newGame();
-        save();
-        toast('已重置，重新开始躺平');
-        refresh();
-      });
-    };
-    $('confirmOk').onclick = () => { const cb = $('confirmModal')._cb; $('confirmModal').style.display = 'none'; if (cb) cb(); };
-    $('confirmCancel').onclick = () => { $('confirmModal').style.display = 'none'; $('confirmModal')._cb = null; };
+  // ============ toast / confirm ============
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.style.display = 'block';
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.style.display = 'none'; }, 2400);
   }
-
-  function onHeroTap(i) {
-    const h = core.HEROES[i];
-    const st = s.heroes[i];
-    if (!st.unlocked) {
-      const cost = s.heroDeal ? Math.floor(h.unlockSoul * core.HERO_DEAL_PCT) : h.unlockSoul;
-      if (s.soul < cost) { toast('灵魂不足 (' + cost + ')'); return; }
-      showConfirm('招募 ' + h.name, '花费 ' + cost + ' 灵魂招募' + h.name + '？\n' + h.desc, () => {
-        const r = core.tryBuyHero(s, i);
-        if (!r.ok) toast(r.msg); else { save(); toast('成功招募 ' + h.name + '！'); refresh(); }
-      });
-      return;
-    }
-    if (st.level >= h.maxLevel) { toast('已满级'); return; }
-    const r = core.tryUpgradeHero(s, i);
-    if (!r.ok) toast(r.msg); else { save(); toast(h.name + ' 升到 ' + r.level + ' 级'); refresh(); }
-  }
-
-  function onQuestClaim(i) {
-    const q = s.daily.quests[i];
-    if (!q || q.claimed) return;
-    if (q.progress < q.need) { toast('任务未完成'); return; }
-    playAd('task_reward', () => {
-      const r = core.claimQuest(s, i);
-      if (!r.ok) { toast(r.msg); return; }
-      save(); toast('任务完成！灵魂 +' + r.reward); refresh();
-    });
-  }
-
-  function onAdTap(key, subEl) {
-    const st = adState(key);
-    if (!st.ok) { toast(st.text || '暂不可用'); return; }
-    doAd(key);
-  }
-
   function showConfirm(title, text, cb) {
     $('confirmTitle').textContent = title;
     $('confirmText').textContent = text;
@@ -390,136 +486,83 @@
     $('confirmModal').style.display = 'flex';
   }
 
-  function showOffline() {
-    const off = pendingOffline;
-    if (!off) return;
-    $('offSec').textContent = formatDuration(off.seconds);
-    $('offCoin').textContent = formatNum(off.coin);
-    $('offCap').style.display = off.capped ? 'block' : 'none';
-    $('offlineModal').style.display = 'flex';
+  // ============ 绑定 ============
+  function bindUI() {
+    // 首页
+    $('homeSettings').onclick = () => showConfirm('重置全部进度？', '钱包、关卡进度、星级将全部清空，无法恢复！', () => {
+      localStorage.removeItem(META_KEY);
+      meta = { coin: 0, soul: 0, progress: { unlocked: 1, stars: {} }, settings: {}, dailyBonusDate: '' };
+      saveMeta(); toast('已重置'); refreshHome();
+    });
+    $('dailyBonusBtn').onclick = dailyBonus;
+    $('adCoin').onclick = walletCoinAd;
+    $('adSoul').onclick = walletSoulAd;
+    // 进入页
+    $('entryBack').onclick = goHome;
+    $('entryGo').onclick = () => startLevel(currentLevel.id);
+    $('eliteRow').onclick = () => {
+      const ef = LVL.eliteSupport(currentLevel);
+      if (eliteUsed) return toast('已使用精锐支援');
+      if (meta.coin < ef.cost.coin) return toast('钱包金币不足 (' + formatNum(ef.cost.coin) + ')');
+      eliteUsed = true;
+      toast('已启用精锐支援');
+      buildEntry();
+    };
+    // 游戏
+    $('gameExit').onclick = () => showConfirm('退出本局？', '当前局进度将作废（钱包与关卡进度保留）。', () => { goHome(); });
+    $('battleStage').addEventListener('click', onCanvasTap);
+    // 点触菜单
+    $('tapClose').onclick = closeTapMenu;
+    $('tapMenuMask').addEventListener('click', e => { if (e.target === $('tapMenuMask')) closeTapMenu(); });
+    // 门破
+    $('reviveBtn').onclick = () => {
+      playAd('revive', () => {
+        const r = core.tryRevive(s);
+        if (!r.ok) { toast(r.msg || '复活失败'); $('defeatModal').style.display = 'none'; onDefeatChoice(); return; }
+        core.markAdUsed(s, 'revive');
+        revivesUsed += 1;
+        $('defeatModal').style.display = 'none';
+        toast('复活成功！大门回 50% 血');
+        refreshGameTop();
+      });
+    };
+    $('acceptBtn').onclick = onDefeatChoice;
+    // 胜利
+    $('winNext').onclick = () => {
+      $('winModal').style.display = 'none';
+      const next = currentLevel.id + 1;
+      if (LVL.getLevel(next)) openEntry(LVL.getLevel(next)); else goHome();
+    };
+    $('winHome').onclick = () => { $('winModal').style.display = 'none'; goHome(); };
+    // 确认弹窗
+    $('confirmOk').onclick = () => { const cb = $('confirmModal')._cb; $('confirmModal').style.display = 'none'; if (cb) cb(); };
+    $('confirmCancel').onclick = () => { $('confirmModal').style.display = 'none'; $('confirmModal')._cb = null; };
   }
 
-  function settleOffline(double) {
-    if (!pendingOffline) return;
-    core.applyOffline(s, Date.now() / 1000, double);
-    pendingOffline = null;
-    save();
-    $('offlineModal').style.display = 'none';
-    toast('离线收益已领取' + (double ? '（x2）' : ''));
-    refresh();
+  function init() {
+    try {
+      bindModules();
+      loadMeta();
+      bindUI();
+      preloadBattleImages();
+      showScreen('home');
+      refreshHome();
+      // 调试：?level=N 直接进某关
+      const q = new URLSearchParams(location.search);
+      if (q.get('level')) startLevel(parseInt(q.get('level'), 10));
+    } catch (e) {
+      window.__initErr = (e && (e.message || e)) + '\n' + (e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : '');
+      console.error('INIT FAIL', e);
+    }
   }
-
-  // ============ 每秒刷新 ============
-  function refresh() {
-    if (!s) return;
-    $('coinText').textContent = formatNum(s.coin);
-    $('cpsText').textContent = '+' + formatNum(core.coinPerSec(s)) + '/s';
-    $('soulText').textContent = formatNum(Math.floor(s.soul));
-    $('levelText').textContent = 'Lv.' + s.level;
-    $('expFill').style.width = Math.min(100, s.totalExp / core.expForLevel(s.level) * 100) + '%';
-
-    // 床
-    s.beds.forEach((b, i) => {
-      const ref = bedRefs[i];
-      const cost = b.unlocked ? core.bedCost(s, i) : core.unlockBedCost(s, i);
-      const can = s.coin >= cost;
-      ref.card.className = 'bed-card' + (b.unlocked ? '' : ' locked');
-      ref.lv.textContent = b.unlocked ? 'Lv.' + b.level : '🔒';
-      ref.lv.style.fontSize = b.unlocked ? '' : '30rpx';
-      ref.cps.textContent = b.unlocked ? '+' + core.bedCoinPerSec(b).toFixed(1) + '/s' : '';
-      ref.btn.textContent = (b.unlocked ? '升级 ' : '解锁 ') + formatNum(cost);
-      ref.btn.classList.toggle('disabled', !can);
-    });
-
-    // 门/炮塔/祭坛
-    const doorMax = core.doorMaxHp(s);
-    const doorPct = Math.max(0, s.door.hp / doorMax * 100);
-    $('doorImg').src = '../images/tiles/' + (s.door.level >= 20 ? 'door_3' : s.door.level >= 5 ? 'door_2' : 'door_1') + '.png';
-    $('doorName').textContent = '大门 Lv.' + s.door.level;
-    $('doorHp').textContent = '血 ' + formatNum(Math.floor(s.door.hp)) + '/' + formatNum(doorMax);
-    const hpFill = $('doorHpFill');
-    hpFill.style.width = doorPct + '%';
-    hpFill.classList.toggle('hp-low', doorPct < 35);
-    $('doorDps').textContent = '反击 ' + formatNum(core.doorCounterDps(s) + core.heroDpsTotal(s)) + '/s（含英雄）';
-    const dCost = core.doorCost(s);
-    $('doorBtn').textContent = '升级 ' + formatNum(dCost);
-    $('doorBtn').classList.toggle('disabled', s.coin < dCost);
-    $('turretName').textContent = '炮塔 Lv.' + s.turret.level;
-    $('turretDps').textContent = '伤害 ' + formatNum(core.turretDps(s)) + '/s';
-    const tCost = core.turretCost(s);
-    $('turretBtn').textContent = '升级 ' + formatNum(tCost);
-    $('turretBtn').classList.toggle('disabled', s.coin < tCost);
-    $('altarName').textContent = '灵魂祭坛 Lv.' + s.altar.level;
-    $('altarBonus').textContent = '全局产量 +' + Math.floor(s.altar.level * core.BUILDINGS.altar.bonusPerLevel * 100) + '%';
-    const aCost = core.altarCost(s);
-    $('altarBtn').textContent = '献祭 ' + formatNum(aCost);
-    $('altarBtn').classList.toggle('disabled', s.soul < aCost);
-
-    // 波次
-    const threat = core.nextWaveThreat(s);
-    const bossActive = s.ghosts.some(g => g.boss);
-    $('waveTitle').textContent = '第 ' + s.wave + ' 波猛鬼';
-    $('waveGhost').src = bossActive ? '../images/sprites/ghost_4.png' : '../images/sprites/ghost_1.png';
-    $('waveGhost').style.display = s.wave > 0 ? '' : 'none';
-    $('nextWaveText').textContent = s.ghosts.length > 0
-      ? '战斗中 (剩' + s.ghosts.length + '只' + (bossActive ? '·BOSS' : '') + ')'
-      : '下一波 ' + formatDuration(Math.max(0, s.nextWaveAt - s.time)) + (threat.boss ? ' ·BOSS' : '');
-    $('waveBanner').classList.toggle('danger', !threat.safe && s.ghosts.length === 0);
-    $('waveBanner').classList.toggle('boss', bossActive);
-    $('threatTag').style.display = (!threat.safe && s.ghosts.length === 0) ? '' : 'none';
-    $('threatTag').textContent = bossActive ? '⚠️ BOSS 战斗中！' : (threat.boss && s.ghosts.length === 0 ? '⚠️ Boss 波将至！' : '危险！建议升级防御');
-
-    // 英雄
-    core.HEROES.forEach((h, i) => {
-      const st = s.heroes[i];
-      const ref = heroRefs[i];
-      const upCost = st.unlocked ? core.heroUpgradeCost(s, i) : h.unlockSoul;
-      const cost = s.heroDeal ? Math.floor(upCost * core.HERO_DEAL_PCT) : upCost;
-      const can = st.unlocked ? s.coin >= cost : s.soul >= cost;
-      ref.card.className = 'hero-card' + (st.unlocked ? '' : ' locked');
-      ref.type.textContent = (h.type === 'dps' ? '攻击' : h.type === 'slow' ? '减伤' : '治疗') + ' · Lv.' + st.level + '/' + h.maxLevel;
-      ref.btn.textContent = (st.unlocked ? '升级 ' : '招募 ') + formatNum(cost) + (st.unlocked ? '' : ' 灵魂');
-      ref.btn.classList.toggle('disabled', !can);
-    });
-    $('dealTag').style.display = s.heroDeal ? '' : 'none';
-
-    // 任务
-    s.daily.quests.forEach((q, i) => {
-      const ref = questRefs[i];
-      ref.nm.textContent = q.name;
-      ref.fill.style.width = (q.progress / q.need * 100) + '%';
-      ref.prog.textContent = Math.floor(q.progress) + '/' + q.need + ' · 奖励 ' + q.reward + ' 灵魂';
-      ref.btn.textContent = q.claimed ? '已领取' : '📺 领取';
-      ref.btn.className = 'btn-quest' + (q.claimed ? ' claimed' : (q.progress >= q.need ? '' : ' disabled'));
-    });
-
-    // 成就
-    const achList = core.listAchievements(s);
-    achList.forEach((a, i) => {
-      const ref = achRefs[i];
-      ref.nm.textContent = (a.unlocked ? '🏅 ' : '🔒 ') + a.name;
-      ref.nm.classList.toggle('dim', !a.unlocked);
-      ref.item.classList.toggle('claimed', a.claimed);
-      ref.btn.textContent = a.claimed ? '已领取' : (a.unlocked ? '领取' : '未达成');
-      ref.btn.className = 'btn-quest small' + (a.claimed ? ' claimed' : (a.unlocked ? '' : ' disabled'));
-    });
-
-    // 广告卡
-    const boostOn = s.time < s.incomeBoostUntil;
-    adRefs.coin_bonus.sub.textContent = adState('coin_bonus').ok ? '看广告领金币' : adState('coin_bonus').text;
-    adRefs.income_boost.sub.textContent = boostOn ? '剩 ' + formatDuration(s.incomeBoostUntil - s.time) : (adState('income_boost').ok ? '1小时产量x2' : adState('income_boost').text);
-    const doorSt = adState('door_fix');
-    adRefs.door_fix.sub.textContent = doorSt.ok ? (s.door.hp / doorMax < 0.4 ? '门残血可修复' : '门还健康') : doorSt.text;
-    adRefs.wave_delay.sub.textContent = adState('wave_delay').ok ? '猛鬼迟到10分钟' : adState('wave_delay').text;
-    adRefs.daily_bonus.sub.textContent = adState('daily_bonus').ok ? '金币+灵魂 每天1次' : adState('daily_bonus').text;
-    adRefs.hero_deal.sub.textContent = s.heroDeal ? '折扣生效中' : (adState('hero_deal').ok ? '英雄招募/升级7折' : adState('hero_deal').text);
-    adRefs.income_boost.card.classList.toggle('active', boostOn);
-  }
-
-  // 等核心模块（bootstrap.js fetch 加载）就绪后再启动
-  if (window.core && window.num) {
-    init();
-  } else {
+  // bootstrap.js 异步 fetch 核心模块，完成后派发 core-modules-ready
+  // 必须等它，否则 window.core / window.num 还没挂上
+  function boot() {
+    if (window.core && window.num) { init(); return; }
     document.addEventListener('core-modules-ready', init, { once: true });
+    // 兜底：8s 还没就绪则报错
+    setTimeout(() => { if (!window.core) window.__initErr = 'core modules not loaded in 8s'; }, 8000);
   }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })();
