@@ -245,6 +245,7 @@ Page({
   showTapMenu(hit) {
     const s = this.s;
     const stats = [];
+    let slotOptions = [];
     let title = '', desc = '', action = '', disabled = false, fn = null;
 
     if (hit.type === 'bed') {
@@ -307,6 +308,27 @@ Page({
         fn = () => { const r = core.tryUpgradeHero(s, hit.index); if (!r.ok) return this.toast(r.msg); this.toast(h.name + ' 升到 ' + r.level + ' 级'); this.showTapMenu(hit); this.refreshGameTop(); };
         if (s.coin < cost) disabled = true;
       }
+    } else if (hit.type === 'slot') {
+      // v0.5 道具插槽：空槽=选道具，已占=拆除
+      const slotIdx = hit.index;
+      const placedId = s.itemSlots ? s.itemSlots[slotIdx] : null;
+      slotOptions = [];
+      if (!placedId) {
+        title = '放置道具'; desc = '选一个放入该位置'; action = '';
+        core.ITEM_IDS.forEach(id => {
+          const it = core.ITEMS[id];
+          const c = core.itemPlaceCost(s, id);
+          const can = it.res === 'coin' ? s.coin >= c : s.soul >= c;
+          slotOptions.push({ id, icon: it.icon, name: it.name, cost: formatNum(c) + (it.res === 'coin' ? '💰' : '👻'), poor: !can });
+        });
+      } else {
+        const it = core.ITEMS[placedId];
+        const info = core.itemSlotInfo(s, slotIdx);
+        title = it.icon + ' ' + it.name; desc = it.desc;
+        if (placedId === 'barrier') stats.push({ k: '屏障', v: formatNum(Math.floor(info.barrierHp || 0)) + '/' + formatNum(info.barrierMax) });
+        action = '拆除（不返还）';
+        fn = () => { const r = core.removeItem(s, slotIdx); if (!r.ok) return this.toast(r.msg); this.toast(it.name + ' 已拆除'); this.showTapMenu(hit); this.refreshGameTop(); };
+      }
     }
 
     // 定位（设计坐标 → 屏幕 px，基于 canvas 实际尺寸）
@@ -314,11 +336,23 @@ Page({
     this.setData({
       tapMenu: {
         show: true, x: pos.x, y: pos.y, title, desc, stats,
+        slotOptions,
         action: disabled ? '资源不足' : action, disabled
       },
       '_tapFn': fn
     });
     this._tapFn = fn;
+  },
+  onSlotOptTap(e) {
+    const id = e.currentTarget.dataset.id;
+    const slotIdx = this.tapTarget ? this.tapTarget.index : -1;
+    const s = this.s;
+    if (slotIdx < 0 || !s) return;
+    const r = core.placeItem(s, slotIdx, id);
+    if (!r.ok) return this.toast(r.msg);
+    this.toast(core.ITEMS[id].icon + ' ' + core.ITEMS[id].name + ' 已放置');
+    this.showTapMenu(this.tapTarget);
+    this.refreshGameTop();
   },
   updateTapStats() { if (this.tapTarget) this.showTapMenu(this.tapTarget); },
   onTapAction() { if (this._tapFn && !this.data.tapMenu.disabled) this._tapFn(); },
