@@ -255,6 +255,27 @@ v0.2 是纯数值/文字 UI（顶栏数字 + 卡片按钮），用户反馈"变�
 - [ ] 音效（Kenney CC0）
 - [ ] 广告位 ID + appid 替换（用户操作）
 
+## 2026-08-18 v0.6.1 首页锁定一屏，永不滚动
+
+### 背景
+用户要求："首页不要有显示不全上下滚动页面的情况"。原首页所有区块（标题/钱包/关卡/广告/footer）高度固定堆叠，在 667~852px 手机屏上内容超出一屏 → 必须滚动才能看全。
+
+### 设计决策
+- **容器锁死一屏**：Web `.screen-home { height:100dvh; overflow:hidden }`；小程序首页 `height:calc(100vh - statusBar)` + `overflow:hidden`（状态栏已用独立占位 div 吃掉，不重复扣）。页面物理上不可能出现滚动条。
+- **关卡区弹性填充**：`.home-section.levels { flex:1; min-height:0 }` + `.level-grid { flex:1 }`。关卡网格是唯一弹性区，吃满剩余高度——高屏行距拉开、矮屏（SE 667px）自动压缩到每行 ~70px。
+- **卡片紧凑 3 行**：关号+星级同行 / 名称（单行 ellipsis）/ 副标题（锁定时显示"🔒 通关上一关解锁"替代原独立锁行，省一行）。内容总高 ≤60px（Web）/ ≤110rpx（小程序），配合 `grid-auto-rows: minmax(64px,120px)`（Web）/ `minmax(122rpx,200rpx)`（小程序）保证矮屏行高装得下。
+- 顶部标题/钱包/广告福利/footer 全部 `flex-shrink:0` 并压缩间距，把垂直空间让给关卡网格。
+
+### 踩坑记录（v0.6.1 特有）
+- `grid-auto-rows: minmax(0,120px)` 会让矮屏行高被压到 67px，4 行文字（旧卡片结构）溢出被 `overflow:hidden` 裁切副标题 → 必须改成紧凑 3 行结构 + `minmax(64px,...)` 下限。
+- 小程序首页原 `.screen { min-height:100vh }` 与锁定高度冲突 → 新增 `.home-fit` 覆盖 `min-height:0`。
+- 微信端无法跑 wx 运行时，布局用同结构 Web 页 + Camofox 视口模拟（rpx 按 2x 换算对齐验证）。
+
+### 测试与验证
+- 200/200 测试全绿（纯 CSS/结构改动，核心逻辑零改动）
+- Camofox 实测三种视口：SE 375×667 / iPhone12 390×844 / 桌面 1280×800 → `documentElement.scrollHeight - innerHeight = 0`（无滚动），8 张卡片 `scrollHeight ≤ clientHeight`（零裁切），footer 全部可见
+- vision 复核 SE 截图：标题/钱包/8 卡/广告/footer 一屏完整、无裁切无破损
+
 ---
 
 ## 数值设计速查（当前参数）
