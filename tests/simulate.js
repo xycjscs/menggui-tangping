@@ -636,6 +636,48 @@ assert(migrated.daily.date === core.dateStr(Date.now()), '迁移: daily 日期�
 const evMig = core.tick(migrated, 10);
 assert(typeof evMig.length === 'number', '迁移后 tick 正常运行');
 
+// ============ 19. v0.4 关卡模块 + 战场命中检测 ============
+const LVL = require('../js/levels.js');
+assert(LVL.LEVELS.length === 8, '关卡定义 8 个');
+assert(LVL.getLevel(1) && LVL.getLevel(1).wave === 5, '第1关: 5 波');
+assert(LVL.getLevel(100) === null, '无效关卡返回 null');
+// 解锁规则：第1关永远开，其余需通关前一关
+assert(LVL.isUnlocked({ unlocked: 1, stars: {} }, 1) === true, '第1关默认解锁');
+assert(LVL.isUnlocked({ unlocked: 1, stars: {} }, 2) === false, '第2关未通关第1关时锁定');
+assert(LVL.isUnlocked({ unlocked: 2, stars: { 1: 3 } }, 2) === true, '通关第1关后第2关解锁');
+assert(LVL.isUnlocked({ unlocked: 1, stars: {} }, 99) === false, '不存在的关卡锁定');
+// 星级：复活次数决定
+assert(LVL.starsForRevives(0) === 3, '0 次复活=3星');
+assert(LVL.starsForRevives(1) === 2, '1 次复活=2星');
+assert(LVL.starsForRevives(3) === 1, '多次复活=1星');
+// 支援效果
+const sup1 = LVL.supportEffect(LVL.getLevel(1), 'coin');
+assert(sup1.coin > 0, '金币支援给正数金币');
+assert(LVL.supportEffect(LVL.getLevel(1), 'door').door === 2, '大门支援 +2 级');
+// 精锐支援
+const ef1 = LVL.eliteSupport(LVL.getLevel(1));
+assert(ef1.cost.coin > 0 && ef1.gain.coin > ef1.cost.coin, '精锐支援: 收益>成本');
+assert(LVL.bestStars({ stars: { 1: 3 } }, 1) === 3, '最高星读取');
+assert(LVL.bestStars(null, 1) === 0, '无进度时 0 星');
+
+// 战场命中检测
+const bvHit = new bv.BattleView({});
+const doorHit = bvHit.hitTest(bvHit.wallX, bvHit.H * 0.5);
+assert(doorHit && doorHit.type === 'door', '命中大门 (' + JSON.stringify(doorHit) + ')');
+const turretHit = bvHit.hitTest(bvHit.turretPos.x, bvHit.turretPos.y);
+assert(turretHit && turretHit.type === 'turret', '命中炮塔');
+const altarHit = bvHit.hitTest(bvHit.altarPos.x, bvHit.altarPos.y);
+assert(altarHit && altarHit.type === 'altar', '命中祭坛');
+const heroHit = bvHit.hitTest(bvHit.heroPos(2).x, bvHit.heroPos(2).y);
+assert(heroHit && heroHit.type === 'hero' && heroHit.index === 2, '命中英雄(索引2)');
+const bedHit = bvHit.hitTest(bvHit.bedPos(3).x + 20, bvHit.bedPos(3).y + 15);
+assert(bedHit && bedHit.type === 'bed' && bedHit.index === 3, '命中床(索引3)');
+assert(bvHit.hitTest(bvHit.W + 50, bvHit.H * 0.5) === null, '走廊空白处不命中');
+assert(bvHit.hitTest(-10, -10) === null, '画布外不命中');
+// 层级：炮塔与门重叠区优先炮塔（炮塔画在门左内侧）
+const overlap = bvHit.hitTest(bvHit.turretPos.x, bvHit.turretPos.y);
+assert(overlap.type === 'turret', '重叠区炮塔优先于门');
+
 // ============ 汇总 ============
 section('测试汇总');
 console.log(`通过 ${pass} / ${pass + fail}  ${fail === 0 ? '✅ 全部通过' : '❌ 有 ' + fail + ' 个失败'}`);
