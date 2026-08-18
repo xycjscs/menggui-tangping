@@ -46,16 +46,24 @@
 pages/        小程序页面（index 主游戏 + settings 设置）
 js/core/      纯 JS 核心逻辑（Node 可测，不依赖 wx）
 js/wx/        wx 封装层（存档、1s tick 循环、广告）
+js/battle/    2D 战场渲染层 v0.3（环境无关，Web/小程序共用）
+web/          Web 试玩版（复用同一份核心，canvas 战场）
 images/       CC0 游戏素材
-tests/        核心逻辑测试 + 3 天数值模拟 + 调参器
+tests/        核心逻辑测试 + 3 天数值模拟 + 战场渲染层无头测试
 docs/         开发日志 + AI 断点交接文档
 config.js     广告位配置（★ 上线前修改）
 ```
 
+## Web 试玩版
+
+浏览器直接玩：`web/index.html`（部署在 [GitHub Pages](https://xycjscs.github.io/menggui-tangping/)）。
+与小程序共用同一份 `js/core/gameCore.js` 数值逻辑与 `js/battle/battleView.js` 战场渲染层，零分叉。
+广告为 3 秒倒计时模拟（Web 无真实广告位）。
+
 ## 本地测试
 
 ```bash
-node tests/simulate.js   # 130 断言 + 3 天 AI 挂机模拟（含 Boss/英雄）
+node tests/simulate.js   # 146 断言 + 3 天 AI 挂机模拟（含 Boss/英雄/战场渲染层）
 node tests/tune.js       # 数值曲线调参对比
 ```
 
@@ -77,3 +85,4 @@ node tests/tune.js       # 数值曲线调参对比
 
 - v0.1.0 — 基础放置循环（床/门/炮塔/祭坛 + 波次 + 7 广告位）
 - v0.2.0 — 英雄系统 / Boss 波 / 每日任务 / 成就 / 每日福利 / 英雄7折 / 任务领奖（+3 广告位，共 10 个）
+- v0.3.0 — **2D 可视化战场**（俯视战棋）：canvas 实时渲染，猛鬼从走廊阴影走出并推进列阵、突刺攻击大门；炮塔旋转追踪 + 曳光弹道；Boss 1.7 倍体型 + 红圈光环；门受击震屏闪红；死亡爆裂 + 灵魂/金币掉落飘字。Web 试玩版与小程序共用同一份 `js/battle/battleView.js` 渲染层，核心数值零改动。
