@@ -27,6 +27,20 @@
 .expbar-fill { height: 100%; background: linear-gradient(90deg, #7c5cff, #b49aff); transition: width .3s; }
 .gear { width: 48rpx; height: 48rpx; opacity: 0.8; }
 
+/* ===== 2D 战场（v0.3）===== */
+.battle-canvas {
+  display: block;
+  width: 100%;
+  height: 440rpx;
+  margin-top: 20rpx;
+  border-radius: 16rpx;
+  border: 2rpx solid rgba(150,120,255,0.35);
+  background: #181128;
+  box-shadow: 0 8rpx 24rpx rgba(0,0,0,0.45);
+}
+/* 旧版文字波次横幅已由战场 HUD 取代 */
+.hidden { display: none !important; }
+
 /* ===== 波次横幅 ===== */
 .wave-banner {
   margin-top: 20rpx;
