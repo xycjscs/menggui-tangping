@@ -1,4 +1,7 @@
 {
   "usingComponents": {},
-  "navigationBarTitleText": "猛鬼宿舍·躺平发育"
+  "navigationStyle": "custom",
+  "disableScroll": false,
+  "backgroundColor": "#171126",
+  "backgroundTextStyle": "light"
 }
