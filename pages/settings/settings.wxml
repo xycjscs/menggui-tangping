@@ -3,9 +3,21 @@
     <view class="card-title">游戏统计</view>
     <view class="stat-row"><text>玩家等级</text><text>{{stats.level}}</text></view>
     <view class="stat-row"><text>当前波次</text><text>{{stats.wave}}</text></view>
+    <view class="stat-row"><text>累计清波</text><text>{{stats.wavesCleared}}</text></view>
+    <view class="stat-row"><text>Boss 击杀</text><text>{{stats.bosses}}</text></view>
     <view class="stat-row"><text>累计击杀</text><text>{{stats.kills}}</text></view>
     <view class="stat-row"><text>累计金币</text><text>{{stats.totalCoin}}</text></view>
+    <view class="stat-row"><text>当前灵魂</text><text>{{stats.souls}}</text></view>
     <view class="stat-row"><text>失败次数</text><text>{{stats.defeats}}</text></view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">英雄进度</view>
+    <view class="stat-row" wx:for="{{heroes}}" wx:key="id">
+      <text>{{item.unlocked ? item.name : '🔒 ' + item.name}}</text>
+      <text wx:if="{{item.unlocked}}">Lv.{{item.level}}/{{item.maxLevel}}</text>
+      <text wx:else>未招募</text>
+    </view>
   </view>
 
   <view class="card danger">
@@ -13,7 +25,7 @@
     <button class="btn-reset" bindtap="onResetTap">重置存档（不可恢复）</button>
   </view>
 
-  <view class="footer">猛鬼宿舍·躺平发育 v0.1.0</view>
+  <view class="footer">猛鬼宿舍·躺平发育 v0.2.0</view>
 
   <view class="modal-mask" wx:if="{{showResetConfirm}}">
     <view class="modal" catchtap="">

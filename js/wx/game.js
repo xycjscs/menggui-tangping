@@ -42,7 +42,7 @@ class GameImpl {
     if (events.length) {
       this.emit('events', events);
       // 关键事件自动存档
-      if (events.some(e => ['defeat', 'wave_cleared', 'first_kill'].includes(e.type))) {
+      if (events.some(e => ['defeat', 'wave_cleared', 'first_kill', 'boss_killed'].includes(e.type))) {
         this.save();
       }
     }
@@ -76,6 +76,12 @@ class GameImpl {
   unlockBed(i) { const r = core.tryUnlockBed(this.s, i); if (r.ok) { this.save(); this.emit('change'); } return r; }
   upgradeDoor() { const r = core.tryUpgradeDoor(this.s); if (r.ok) { this.save(); this.emit('change'); } return r; }
   upgradeTurret() { const r = core.tryUpgradeTurret(this.s); if (r.ok) { this.save(); this.emit('change'); } return r; }
+  // v0.2 英雄
+  buyHero(i) { const r = core.tryBuyHero(this.s, i); if (r.ok) { this.save(); this.emit('change'); } return r; }
+  upgradeHero(i) { const r = core.tryUpgradeHero(this.s, i); if (r.ok) { this.save(); this.emit('change'); } return r; }
+  // v0.2 任务/成就
+  claimQuest(i) { const r = core.claimQuest(this.s, i); if (r.ok) { this.save(); this.emit('change'); } return r; }
+  claimAchievement(id) { const r = core.claimAchievement(this.s, id); if (r.ok) { this.save(); this.emit('change'); } return r; }
 
   /** 看广告并结算（UI 层播广告成功后调用） */
   applyAd(adKey, extra) {

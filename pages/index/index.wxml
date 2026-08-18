@@ -16,9 +16,9 @@
   </view>
 
   <!-- 猛鬼波次横幅 -->
-  <view class="wave-banner {{threatDanger ? 'danger' : ''}}">
+  <view class="wave-banner {{threatDanger ? 'danger' : ''}} {{bossActive ? 'boss' : ''}}">
     <view class="wave-left">
-      <image class="wave-ghost" src="/images/sprites/ghost_1.png" wx:if="{{wave>0}}"/>
+      <image class="wave-ghost" src="{{bossActive ? '/images/sprites/ghost_4.png' : '/images/sprites/ghost_1.png'}}" wx:if="{{wave>0}}"/>
       <text class="wave-title">第 {{wave}} 波猛鬼</text>
     </view>
     <view class="wave-right">
@@ -26,6 +26,7 @@
       <text class="wave-ghosts" wx:if="{{ghostInfo}}">{{ghostInfo}}</text>
     </view>
     <text class="threat-tag" wx:if="{{threatDanger}}">危险！建议升级防御</text>
+    <text class="threat-tag boss-tag" wx:if="{{bossActive}}">BOSS 战斗中！</text>
   </view>
 
   <!-- 床区 -->
@@ -51,7 +52,7 @@
         <text class="def-name">大门 Lv.{{door.level}}</text>
         <text class="def-hp">血 {{door.hpText}}</text>
         <view class="hpbar"><view class="hpbar-fill {{door.hpPct<35?'hp-low':''}}" style="width:{{door.hpPct}}%"></view></view>
-        <text class="def-dps">反击 {{door.dps}}/s</text>
+        <text class="def-dps">反击 {{door.dps}}/s（含英雄）</text>
       </view>
       <button class="btn-up {{door.canAfford?'':'disabled'}}" bindtap="onUpgradeDoor">升级 {{door.costText}}</button>
     </view>
@@ -73,6 +74,51 @@
       <text class="def-dps">全局产量 +{{altar.bonus}}%</text>
     </view>
     <button class="btn-up soul-btn {{altar.canAfford?'':'disabled'}}" bindtap="onUpgradeAltar">献祭 {{altar.costText}}</button>
+  </view>
+
+  <!-- v0.2 英雄区 -->
+  <view class="section-title">
+    <text>英雄</text>
+    <text class="deal-tag" wx:if="{{heroDealOn}}">📺 7折券生效中</text>
+  </view>
+  <view class="hero-grid">
+    <view class="hero-card {{item.unlocked ? '' : 'locked'}}" wx:for="{{heroes}}" wx:key="id" bindtap="onHeroTap" data-idx="{{item.idx}}">
+      <image class="hero-img" src="{{item.icon}}" />
+      <text class="hero-name">{{item.name}}</text>
+      <text class="hero-type">{{item.typeText}} · Lv.{{item.level}}/{{item.maxLevel}}</text>
+      <text class="hero-desc">{{item.desc}}</text>
+      <text class="hero-btn {{item.canAfford ? '' : 'disabled'}}">
+        {{item.unlocked ? '升级 ' : '招募 '}}{{item.costText}}{{item.costIsSoul ? ' 灵魂' : ''}}
+      </text>
+    </view>
+  </view>
+
+  <!-- v0.2 每日任务 + 成就 -->
+  <view class="section-title"><text>每日任务</text><text class="quest-date">每天刷新</text></view>
+  <view class="quest-list">
+    <view class="quest-item" wx:for="{{quests}}" wx:key="idx">
+      <view class="quest-info">
+        <text class="quest-name">{{item.name}}</text>
+        <view class="quest-bar"><view class="quest-fill" style="width:{{item.done?100:item.progress*100/item.need}}%"></view></view>
+        <text class="quest-progress">{{item.progress}}/{{item.need}} · 奖励 {{item.reward}} 灵魂</text>
+      </view>
+      <button class="btn-quest {{item.claimed ? 'claimed' : (item.done ? '' : 'disabled')}}" bindtap="onQuestClaim" data-idx="{{item.idx}}">
+        {{item.claimed ? '已领取' : '📺 领取'}}
+      </button>
+    </view>
+  </view>
+
+  <view class="section-title"><text>成就</text></view>
+  <view class="ach-list">
+    <view class="ach-item {{item.claimed ? 'claimed' : ''}}" wx:for="{{achievements}}" wx:key="id">
+      <view class="ach-info">
+        <text class="ach-name {{item.unlocked ? '' : 'dim'}}">{{item.unlocked ? '🏅' : '🔒'}} {{item.name}}</text>
+        <text class="ach-desc">{{item.desc}} · 奖励 {{item.reward}} 灵魂</text>
+      </view>
+      <button class="btn-quest small {{item.claimed ? 'claimed' : (item.claimable ? '' : 'disabled')}}" bindtap="onAchClaim" data-id="{{item.id}}">
+        {{item.claimed ? '已领取' : (item.claimable ? '领取' : '未达成')}}
+      </button>
+    </view>
   </view>
 
   <!-- 广告福利区 -->
@@ -98,9 +144,19 @@
       <text class="ad-name">延迟猛鬼</text>
       <text class="ad-sub">{{adWave.ok?'猛鬼迟到10分钟':adWave.text}}</text>
     </view>
+    <view class="ad-card daily" bindtap="onAdDaily">
+      <image class="ad-ico" src="/images/icons/ui_medal1.png"/>
+      <text class="ad-name">每日福利</text>
+      <text class="ad-sub">{{adDaily.ok?'金币+灵魂 每天1次':adDaily.text}}</text>
+    </view>
+    <view class="ad-card" bindtap="onAdHeroDeal">
+      <image class="ad-ico" src="/images/icons/sword_gold.png"/>
+      <text class="ad-name">英雄7折</text>
+      <text class="ad-sub">{{heroDealOn?'折扣生效中':(adHeroDeal.ok?'英雄招募/升级7折':adHeroDeal.text)}}</text>
+    </view>
   </view>
 
-  <view class="footer">猛鬼宿舍·躺平发育 v0.1.0 · 素材 CC0 (Kenney)</view>
+  <view class="footer">猛鬼宿舍·躺平发育 v0.2.0 · 素材 CC0 (Kenney)</view>
 
   <!-- 离线收益弹窗 -->
   <view class="modal-mask" wx:if="{{showOffline}}" bindtap="onOfflineClose">

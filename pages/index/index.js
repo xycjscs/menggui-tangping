@@ -17,9 +17,15 @@ Page({
     door: {}, turret: {}, altar: {},
     // 波次
     wave: 0, nextWaveText: '准备中', ghostInfo: '',
-    threatDanger: false,
+    threatDanger: false, bossActive: false,
     // 双倍收益
     boostActive: false, boostText: '',
+    // v0.2 英雄
+    heroes: [],
+    heroDealOn: false,
+    // v0.2 任务/成就
+    quests: [],
+    achievements: [],
     // 弹窗
     showOffline: false,
     offline: null,
@@ -28,7 +34,9 @@ Page({
     adCoins: { ok: true, text: '' },
     adBoost: { ok: true, text: '' },
     adDoor: { ok: false, text: '' },
-    adWave: { ok: true, text: '' }
+    adWave: { ok: true, text: '' },
+    adDaily: { ok: true, text: '' },
+    adHeroDeal: { ok: true, text: '' }
   },
 
   onLoad() {
@@ -36,7 +44,7 @@ Page({
     if (r.fresh) {
       wx.showModal({
         title: '欢迎来到猛鬼宿舍',
-        content: '躺平睡觉赚金币，升级床、大门和炮塔，挡住一波又一波的猛鬼！睡觉也能变强，离线也有收益~',
+        content: '躺平睡觉赚金币，升级床、大门和炮塔，招募英雄，挡住一波又一波的猛鬼！每10波有Boss出没，睡觉也能变强~',
         showCancel: false,
         confirmText: '开始躺平'
       });
@@ -60,6 +68,8 @@ Page({
       if (d.adKey === 'coin_bonus') wx.showToast({ title: '金币 +' + formatNum(d.bonus), icon: 'none' });
       if (d.adKey === 'door_fix') wx.showToast({ title: '大门已修复', icon: 'none' });
       if (d.adKey === 'revive') wx.showToast({ title: '复活成功！', icon: 'none' });
+      if (d.adKey === 'daily_bonus') wx.showToast({ title: '每日福利：金币+' + formatNum(d.bonus) + ' 灵魂+100', icon: 'none' });
+      if (d.adKey === 'hero_deal') wx.showToast({ title: '英雄7折券生效！下次购买/升级生效', icon: 'none' });
       this.refresh();
     });
     this.refresh();
@@ -77,10 +87,14 @@ Page({
     for (const e of evts) {
       if (e.type === 'wave_start') {
         wx.vibrateShort && wx.vibrateShort({ type: 'medium' });
-        this.toast('第 ' + e.wave + ' 波猛鬼来袭！(' + e.ghostCount + '只)');
+        if (e.boss) this.toast('⚠️ 第 ' + e.wave + ' 波 BOSS 来袭！');
+        else this.toast('第 ' + e.wave + ' 波猛鬼来袭！(' + e.ghostCount + '只)');
+      }
+      if (e.type === 'boss_killed') {
+        this.toast('🏆 Boss 被击杀！灵魂大增！');
       }
       if (e.type === 'wave_cleared') {
-        this.toast('第 ' + e.wave + ' 波清除！灵魂+' + e.bonus);
+        this.toast((e.boss ? 'BOSS 波清除！' : '第 ' + e.wave + ' 波清除！') + ' 灵魂+' + e.bonus);
       }
       if (e.type === 'defeat') {
         this.setData({ showDefeat: true, defeatWave: e.wave });
@@ -112,6 +126,46 @@ Page({
     const doorMax = core.doorMaxHp(s);
     const threat = core.nextWaveThreat(s);
     const boostOn = s.time < s.incomeBoostUntil;
+
+    // v0.2 英雄
+    const heroes = core.HEROES.map((h, i) => {
+      const st = s.heroes[i];
+      const upCost = st.unlocked ? core.heroUpgradeCost(s, i) : h.unlockSoul;
+      const shownCost = s.heroDeal ? Math.floor(upCost * core.HERO_DEAL_PCT) : upCost;
+      return {
+        idx: i,
+        id: h.id,
+        name: h.name,
+        icon: h.icon,
+        desc: h.desc,
+        typeText: h.type === 'dps' ? '攻击' : h.type === 'slow' ? '减伤' : '治疗',
+        unlocked: st.unlocked,
+        level: st.level,
+        maxLevel: h.maxLevel,
+        costText: formatNum(shownCost),
+        costIsSoul: !st.unlocked,
+        canAfford: st.unlocked ? s.coin >= shownCost : s.soul >= shownCost
+      };
+    });
+
+    // v0.2 任务
+    const quests = s.daily.quests.map((q, i) => ({
+      idx: i,
+      name: q.name,
+      need: q.need,
+      progress: Math.floor(q.progress),
+      done: q.progress >= q.need,
+      claimed: q.claimed,
+      reward: q.reward
+    }));
+
+    // v0.2 成就
+    const achievements = core.listAchievements(s).map(a => ({
+      id: a.id, name: a.name, desc: a.desc, reward: a.reward,
+      unlocked: a.unlocked, claimed: a.claimed,
+      claimable: a.unlocked && !a.claimed
+    }));
+
     this.setData({
       coinText: formatNum(s.coin),
       cpsText: formatNum(core.coinPerSec(s)),
@@ -123,7 +177,7 @@ Page({
         level: s.door.level,
         hpPct: Math.max(0, Math.floor(s.door.hp / doorMax * 100)),
         hpText: formatNum(Math.floor(s.door.hp)) + '/' + formatNum(doorMax),
-        dps: formatNum(core.doorCounterDps(s)),
+        dps: formatNum(core.doorCounterDps(s) + core.heroDpsTotal(s)),
         costText: formatNum(core.doorCost(s)),
         canAfford: s.coin >= core.doorCost(s)
       },
@@ -141,16 +195,23 @@ Page({
       },
       wave: s.wave,
       nextWaveText: s.ghosts.length > 0
-        ? '战斗中 (剩' + s.ghosts.length + '只)'
-        : '下一波 ' + formatDuration(Math.max(0, s.nextWaveAt - s.time)),
-      ghostInfo: s.ghosts.length > 0 ? '存活 ' + s.ghosts.length + ' / 本波 ' + core.waveCount(s.wave) : '',
+        ? '战斗中 (剩' + s.ghosts.length + '只' + (s.ghosts.some(g => g.boss) ? '·含BOSS' : '') + ')'
+        : '下一波 ' + formatDuration(Math.max(0, s.nextWaveAt - s.time)) + (threat.boss ? ' ·BOSS' : ''),
+      ghostInfo: s.ghosts.length > 0 ? '存活 ' + s.ghosts.length + ' / 本波 ' + s.ghosts.length : '',
       threatDanger: !threat.safe && s.ghosts.length === 0,
+      bossActive: s.ghosts.some(g => g.boss),
       boostActive: boostOn,
       boostText: boostOn ? '剩 ' + formatDuration(s.incomeBoostUntil - s.time) : '',
+      heroes,
+      heroDealOn: s.heroDeal,
+      quests,
+      achievements,
       adCoins: this.adState('coin_bonus'),
       adBoost: this.adState('income_boost'),
       adDoor: this.adState('door_fix'),
-      adWave: this.adState('wave_delay')
+      adWave: this.adState('wave_delay'),
+      adDaily: this.adState('daily_bonus'),
+      adHeroDeal: this.adState('hero_deal')
     });
   },
 
@@ -188,6 +249,56 @@ Page({
     else this.toast(r.msg);
   },
 
+  // ============ v0.2 英雄操作 ============
+  onHeroTap(e) {
+    const i = e.currentTarget.dataset.idx;
+    const s = Game.s;
+    const h = core.HEROES[i];
+    const st = s.heroes[i];
+    if (!st.unlocked) {
+      const cost = s.heroDeal ? Math.floor(h.unlockSoul * core.HERO_DEAL_PCT) : h.unlockSoul;
+      if (s.soul < cost) { this.toast('灵魂不足 (' + cost + ')'); return; }
+      if (wx.showModal) wx.showModal({
+        title: '招募 ' + h.name,
+        content: '花费 ' + cost + ' 灵魂招募' + h.name + '？\n' + h.desc,
+        success: res => {
+          if (!res.confirm) return;
+          const r = Game.buyHero(i);
+          if (!r.ok) this.toast(r.msg);
+          else { this.toast('成功招募 ' + h.name + '！'); this.refresh(); }
+        }
+      });
+      return;
+    }
+    if (st.level >= h.maxLevel) { this.toast('已满级'); return; }
+    const r = Game.upgradeHero(i);
+    if (!r.ok) this.toast(r.msg);
+    else this.toast(h.name + ' 升到 ' + r.level + ' 级');
+  },
+
+  // ============ v0.2 任务/成就 ============
+  onQuestClaim(e) {
+    const i = e.currentTarget.dataset.idx;
+    const q = Game.s.daily.quests[i];
+    if (!q || q.claimed) return;
+    if (q.progress < q.need) { this.toast('任务未完成'); return; }
+    // 看广告领奖
+    ad.playRewardAd('task_reward', () => {
+      const r = Game.claimQuest(i);
+      if (!r.ok) { this.toast(r.msg); return; }
+      this.toast('任务完成！灵魂 +' + r.reward);
+      this.refresh();
+    }, () => this.toast('需完整观看广告才能领奖'));
+  },
+
+  onAchClaim(e) {
+    const id = e.currentTarget.dataset.id;
+    const r = Game.claimAchievement(id);
+    if (!r.ok) { this.toast(r.msg); return; }
+    this.toast('成就达成！灵魂 +' + r.reward);
+    this.refresh();
+  },
+
   // ============ 广告操作 ============
   onAdCoin() {
     if (!this.data.adCoins.ok) return this.toast('冷却中: ' + this.data.adCoins.text);
@@ -204,6 +315,14 @@ Page({
   onAdWave() {
     if (!this.data.adWave.ok) return this.toast('冷却中: ' + this.data.adWave.text);
     ad.playRewardAd('wave_delay', () => Game.applyAd('wave_delay'));
+  },
+  onAdDaily() {
+    if (!this.data.adDaily.ok) return this.toast(this.data.adDaily.text || '今日已领');
+    ad.playRewardAd('daily_bonus', () => Game.applyAd('daily_bonus'));
+  },
+  onAdHeroDeal() {
+    if (!this.data.adHeroDeal.ok) return this.toast(this.data.adHeroDeal.text || '折扣已持有');
+    ad.playRewardAd('hero_deal', () => Game.applyAd('hero_deal'));
   },
 
   // ============ 离线结算 ============

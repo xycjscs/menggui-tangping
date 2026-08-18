@@ -1,17 +1,19 @@
 /**
  * 猛鬼宿舍·躺平发育 —— 核心逻辑（纯JS，无wx依赖，Node可直接测试）
+ * v0.2 新增：英雄系统 / Boss 波（每10波）/ 每日任务 / 成就 / 新广告位
  *
  * 玩法（放置版猛鬼宿舍）：
  * - 宿舍 6 张床，每张床是一个"躺平者"，自动生产金币 + 经验
- * - 经验升级获得"灵魂"，灵魂用于升级灵魂祭坛（全局产量 +25%/级）
- * - 金币升级：床（产量）、大门（血量+反击）、炮塔（自动攻击）
- * - 猛鬼按波次来袭：每波 N 只鬼，攻击大门；炮塔+门反击自动消灭鬼
+ * - 经验升级获得"灵魂"，灵魂用于：升级灵魂祭坛（全局产量 +25%/级）、招募英雄
+ * - 金币升级：床（产量）、大门（血量+反击）、炮塔（自动攻击）、英雄（强化）
+ * - 英雄：圣骑士(+DPS) / 暗影猎手(鬼伤害降低) / 战斗法师(+DPS) / 治愈祭司(门回血)
+ * - 猛鬼按波次来袭：每波 N 只鬼；每 10 波出现 BOSS（血量x10，伤害x2.5）
  * - 门耐久被打空 => 鬼抓走全部躺平者（失败）：灵魂留30%、床等级减半、门/炮塔重置
  * - 离线收益：最多累积 8 小时，可看广告翻倍
  *
  * 时间设计（重要）：
  * - s.time = 游戏虚拟时钟（秒），随 tick 推进，波次排期全部基于它
- * - 真实墙钟（Date.now）只用于：广告冷却、存档时间戳
+ * - 真实墙钟（Date.now）只用于：广告冷却、每日任务日期、存档时间戳
  * 这样战斗在任意速度下都是确定且可测试的。
  */
 
@@ -23,6 +25,11 @@ const WAVE_MAX_GAP = 60;                 // 间隔下限
 const FIRST_WAVE_AT = 60;                // 开局 60 秒新手保护
 const DEFENSE_RESPECT_SEC = 45;          // 失败后喘息时间
 const DOOR_REGEN_PCT = 0.02;             // 门每秒回血 2% 上限
+const BOSS_EVERY = 10;                   // 每 N 波出现 Boss
+const BOSS_HP_MULT = 10;                 // Boss 血量倍率
+const BOSS_DMG_MULT = 2.5;               // Boss 伤害倍率
+const BOSS_QUIET_RATIO = 0.5;            // Boss 波常规鬼数量比例
+const HERO_DEAL_PCT = 0.7;               // 英雄折扣广告：7折
 
 // 建筑/设施定义
 const BUILDINGS = {
@@ -68,6 +75,35 @@ const BUILDINGS = {
   }
 };
 
+// ================= 英雄定义 =================
+// type: dps(增加防御DPS) / slow(降低鬼对门的伤害，上限50%) / heal(门额外回血%/s)
+const HEROES = [
+  {
+    id: 'knight', name: '圣骑士', icon: '/images/icons/sword_gold.png',
+    type: 'dps', base: 4, growth: 1.25,
+    unlockSoul: 150, upBase: 60, upGrowth: 1.4, maxLevel: 100,
+    desc: '圣剑普攻，提升防御DPS'
+  },
+  {
+    id: 'archer', name: '暗影猎手', icon: '/images/icons/sword_green.png',
+    type: 'slow', base: 0.08, growth: 0.02,
+    unlockSoul: 400, upBase: 80, upGrowth: 1.4, maxLevel: 100,
+    desc: '诅咒箭矢，降低猛鬼伤害(上限50%)'
+  },
+  {
+    id: 'mage', name: '战斗法师', icon: '/images/icons/sword_purple.png',
+    type: 'dps', base: 12, growth: 1.18,
+    unlockSoul: 1000, upBase: 150, upGrowth: 1.45, maxLevel: 100,
+    desc: '火球齐射，大幅提升防御DPS'
+  },
+  {
+    id: 'priest', name: '治愈祭司', icon: '/images/icons/sword_orange.png',
+    type: 'heal', base: 0.005, growth: 1.2,
+    unlockSoul: 2500, upBase: 200, upGrowth: 1.5, maxLevel: 100,
+    desc: '圣光守护，大门持续回血'
+  }
+];
+
 // 解锁床费用：20 * 4^i
 function unlockBedCost(s, i) {
   return Math.floor(20 * Math.pow(4, i));
@@ -79,9 +115,21 @@ function unlockBedCost(s, i) {
 //   炮塔 DPS 增长(1.35) > 鬼血量增长(1.22) > 鬼数量(线性) => 清波永远可行
 //   门血量增长(1.12) > 鬼伤害增长(1.05) => 门升级领先则永远扛得住
 //   床产量(1.55) > 炮塔成本(1.35) => 金币越来越买得起防御
+// v0.2 终局软上限：鬼血量 1~100 波按 1.22^n 增长（前期张力），
+//   100 波后放缓到 1.01^n。原因：门反击(1.15^n)在300级封顶后，
+//   无上限的 1.22^n 会让 ~240 波起单波耗时 9 小时（实测卡点）。
+//   软上限后终局 = 继续堆门/炮塔的长尾，单波数秒~数分钟。
+//   长期无限成长留给 v0.3 转生(Prestige)系统。
+const GHOST_HP_SOFTCAP_AT = 100;  // 从第 N 波开始软上限
+const GHOST_HP_SOFTCAP_BASE = 99; // 软上限基准指数（1.22^99）
+const GHOST_HP_SOFTCAP_GROWTH = 1.01; // 软上限后每波增长
 const CURVE = {
   waveCount: n => Math.min(3 + n, 30),
-  waveGhostHp: n => Math.floor(15 * Math.pow(1.22, n - 1)),
+  waveGhostHp: n => {
+    const k = n - 1;
+    if (k <= GHOST_HP_SOFTCAP_BASE) return Math.floor(15 * Math.pow(1.22, k));
+    return Math.floor(15 * Math.pow(1.22, GHOST_HP_SOFTCAP_BASE) * Math.pow(GHOST_HP_SOFTCAP_GROWTH, k - GHOST_HP_SOFTCAP_BASE));
+  },
   waveGhostDmg: n => Math.floor(4 * Math.pow(1.05, n - 1)),
   doorMaxHp: s => Math.floor(100 + 80 * Math.pow(1.12, s.door.level - 1)),
   doorCounterDps: s => 4 * Math.pow(1.15, s.door.level - 1),
@@ -96,6 +144,85 @@ function waveGhostHp(n) { return CURVE.waveGhostHp(n); }
 function waveGhostDmg(n) { return CURVE.waveGhostDmg(n); }
 function waveGap(n) { return Math.min(240, 60 + 6 * n); }
 function waveBonus(n) { return Math.floor(20 * Math.pow(1.5, Math.min(n - 1, 20))) + 10; }
+function isBossWave(n) { return n > 0 && n % BOSS_EVERY === 0; }
+
+// ================= 日期工具 =================
+function dateStr(ms) {
+  const d = new Date(ms);
+  return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+}
+
+// ================= 每日任务 =================
+function defaultDaily() {
+  return {
+    date: '',
+    lastBonusDate: '',   // 每日广告福利已领取的日期
+    quests: [
+      { id: 'kill', name: '击退猛鬼', need: 100, progress: 0, claimed: false, reward: 200 },
+      { id: 'upgrade', name: '升级设施', need: 10, progress: 0, claimed: false, reward: 150 },
+      { id: 'coin', name: '赚取金币', need: 5000, progress: 0, claimed: false, reward: 300 }
+    ]
+  };
+}
+
+/** 跨天重置（在 tick 和 load 时调用） */
+function dailyRollover(s) {
+  const today = dateStr(Date.now());
+  if (!s.daily || s.daily.date !== today) {
+    const nd = defaultDaily();
+    nd.date = today;
+    s.daily = nd;
+  }
+}
+
+function questProgress(s, id, delta) {
+  if (!s.daily) return;
+  const q = s.daily.quests.find(x => x.id === id);
+  if (!q || q.claimed) return;
+  q.progress = Math.min(q.need, q.progress + delta);
+}
+
+function claimQuest(s, i) {
+  const q = s.daily && s.daily.quests[i];
+  if (!q) return { ok: false, msg: '无效任务' };
+  if (q.claimed) return { ok: false, msg: '已领取' };
+  if (q.progress < q.need) return { ok: false, msg: '任务未完成' };
+  q.claimed = true;
+  s.soul += q.reward;
+  return { ok: true, reward: q.reward, id: q.id };
+}
+
+// ================= 成就 =================
+const ACHIEVEMENTS = [
+  { id: 'first_kill', name: '初尝胜利', desc: '首次击杀猛鬼', reward: 50, check: s => s.firstKill },
+  { id: 'wave10', name: '小有名气', desc: '累计清除 10 波猛鬼', reward: 100, check: s => s.wavesCleared >= 10 },
+  { id: 'wave50', name: '宿舍守护者', desc: '累计清除 50 波猛鬼', reward: 500, check: s => s.wavesCleared >= 50 },
+  { id: 'wave100', name: '传说英雄', desc: '累计清除 100 波猛鬼', reward: 2000, check: s => s.wavesCleared >= 100 },
+  { id: 'level10', name: '升级达人', desc: '角色达到 10 级', reward: 100, check: s => s.level >= 10 },
+  { id: 'level30', name: '躺平大师', desc: '角色达到 30 级', reward: 500, check: s => s.level >= 30 },
+  { id: 'coin50k', name: '小金库', desc: '累计赚取 5 万金币', reward: 300, check: s => s.totalCoin >= 50000 },
+  { id: 'coin1m', name: '富甲一方', desc: '累计赚取 100 万金币', reward: 2000, check: s => s.totalCoin >= 1000000 },
+  { id: 'defeat1', name: '劫后余生', desc: '经历过 1 次宿舍沦陷', reward: 100, check: s => s.defeats >= 1 },
+  { id: 'heroes4', name: '英雄满编', desc: '解锁全部 4 位英雄', reward: 1000, check: s => s.heroes && s.heroes.every(h => h.unlocked) }
+];
+
+function listAchievements(s) {
+  return ACHIEVEMENTS.map(a => ({
+    id: a.id, name: a.name, desc: a.desc, reward: a.reward,
+    unlocked: a.check(s),
+    claimed: !!(s.achievements && s.achievements.claimed[a.id])
+  }));
+}
+
+function claimAchievement(s, id) {
+  const a = ACHIEVEMENTS.find(x => x.id === id);
+  if (!a) return { ok: false, msg: '无效成就' };
+  if (s.achievements.claimed[id]) return { ok: false, msg: '已领取' };
+  if (!a.check(s)) return { ok: false, msg: '尚未达成' };
+  s.achievements.claimed[id] = true;
+  s.soul += a.reward;
+  return { ok: true, reward: a.reward };
+}
 
 // ================= 状态 =================
 function newGame() {
@@ -115,6 +242,12 @@ function newGame() {
     door: { level: 1, hp: BUILDINGS.door.hpBase + BUILDINGS.door.hpPerLevel },
     turret: { level: 0 },
     altar: { level: 0 },
+    // v0.2 英雄
+    heroes: HEROES.map(() => ({ unlocked: false, level: 0 })),
+    heroDeal: false,         // 英雄折扣广告标记（下次招募/升级 7 折）
+    // v0.2 任务/成就
+    daily: defaultDaily(),
+    achievements: { claimed: {} },
     // 波次
     wave: 0,
     nextWaveAt: FIRST_WAVE_AT,
@@ -123,16 +256,19 @@ function newGame() {
     revivedThisDefeat: false, // 本次失败是否已复活（防无限刷广告）
     // 战斗统计
     ghostsKilled: 0,
+    bossesKilled: 0,
     wavesCleared: 0,
     defeats: 0,
     // 广告
     adCooldown: {},          // 真实时间戳
     incomeBoostUntil: 0,     // 虚拟时间
-    // 成就
+    // 成就标记
     firstKill: false,
     clearedWave10: false
   };
   s.beds[0] = { level: 1, unlocked: true };
+  s.daily = defaultDaily();
+  s.daily.date = dateStr(Date.now());
   return s;
 }
 
@@ -196,28 +332,94 @@ function formatCost(n) {
   return n >= 10000 ? (n / 10000).toFixed(1) + '万' : Math.floor(n).toString();
 }
 
+// ================= 英雄 =================
+function heroState(s, i) { return s.heroes[i]; }
+function heroDpsOf(s, i) {
+  const h = HEROES[i]; const st = s.heroes[i];
+  if (!h || !st || !st.unlocked || h.type !== 'dps') return 0;
+  return h.base * Math.pow(h.growth, st.level - 1);
+}
+function heroSlowOf(s, i) {
+  const h = HEROES[i]; const st = s.heroes[i];
+  if (!h || !st || !st.unlocked || h.type !== 'slow') return 0;
+  return Math.min(0.5, h.base + h.growth * (st.level - 1));
+}
+function heroHealOf(s, i) {
+  const h = HEROES[i]; const st = s.heroes[i];
+  if (!h || !st || !st.unlocked || h.type !== 'heal') return 0;
+  return h.base * Math.pow(h.growth, st.level - 1);
+}
+function heroDpsTotal(s) {
+  return HEROES.reduce((a, h, i) => a + heroDpsOf(s, i), 0);
+}
+function heroSlowTotal(s) {
+  return Math.min(0.5, HEROES.reduce((a, h, i) => a + heroSlowOf(s, i), 0));
+}
+function heroHealTotal(s) {
+  return HEROES.reduce((a, h, i) => a + heroHealOf(s, i), 0);
+}
+function heroUpgradeCost(s, i) {
+  const h = HEROES[i];
+  const lv = s.heroes[i].level; // lv=1 时返回升到 2 级的费用
+  return Math.floor(h.upBase * Math.pow(h.upGrowth, lv));
+}
+function tryBuyHero(s, i) {
+  const h = HEROES[i];
+  const st = s.heroes[i];
+  if (!h || !st) return { ok: false, msg: '无效英雄' };
+  if (st.unlocked) return { ok: false, msg: '已拥有' };
+  let cost = h.unlockSoul;
+  if (s.heroDeal) cost = Math.floor(cost * HERO_DEAL_PCT);
+  if (s.soul < cost) return { ok: false, msg: '灵魂不足 (' + cost + ')' };
+  s.soul -= cost;
+  st.unlocked = true;
+  st.level = 1;
+  if (s.heroDeal) s.heroDeal = false;
+  questProgress(s, 'upgrade', 1);
+  return { ok: true, cost };
+}
+function tryUpgradeHero(s, i) {
+  const h = HEROES[i];
+  const st = s.heroes[i];
+  if (!h || !st) return { ok: false, msg: '无效英雄' };
+  if (!st.unlocked) return { ok: false, msg: '未招募' };
+  if (st.level >= h.maxLevel) return { ok: false, msg: '已满级' };
+  let cost = heroUpgradeCost(s, i);
+  if (s.heroDeal) cost = Math.floor(cost * HERO_DEAL_PCT);
+  if (s.coin < cost) return { ok: false, msg: '金币不足 (' + formatCost(cost) + ')' };
+  s.coin -= cost;
+  st.level += 1;
+  if (s.heroDeal) s.heroDeal = false;
+  questProgress(s, 'upgrade', 1);
+  return { ok: true, cost, level: st.level };
+}
+
 // ================= 防御 =================
 function doorMaxHp(s) { return CURVE.doorMaxHp(s); }
 function doorCounterDps(s) { return CURVE.doorCounterDps(s); }
 function turretDps(s) { return CURVE.turretDps(s); }
-function totalDefendDps(s) { return doorCounterDps(s) + turretDps(s); }
+function totalDefendDps(s) { return doorCounterDps(s) + turretDps(s) + heroDpsTotal(s); }
 
 /**
  * 评估"下一波是否扛得住"：
- * 击杀时间 vs 门存活时间
+ * 击杀时间 vs 门存活时间（含 Boss 波）
  */
 function nextWaveThreat(s) {
   const n = s.wave + 1;
   const cnt = waveCount(n);
   const hp = waveGhostHp(n);
   const dmg = waveGhostDmg(n);
-  const totalHp = cnt * hp;
-  const totalDps = cnt * dmg;
+  let totalHp = cnt * hp;
+  let totalDps = cnt * dmg;
+  if (isBossWave(n)) {
+    totalHp += hp * BOSS_HP_MULT;
+    totalDps += dmg * BOSS_DMG_MULT;
+  }
   const dps = Math.max(totalDefendDps(s), 0.001);
   const tKill = totalHp / dps;
   const doorHp = Math.max(s.door.hp, 1);
   const tDoor = doorHp / Math.max(totalDps, 0.001);
-  return { n, cnt, totalHp, totalDps, tKill, tDoor, safe: tKill < tDoor * 0.8 };
+  return { n, cnt, totalHp, totalDps, tKill, tDoor, safe: tKill < tDoor * 0.8, boss: isBossWave(n) };
 }
 
 // ================= 波次 =================
@@ -226,7 +428,18 @@ function spawnWave(s) {
   const n = waveCount(s.wave);
   const hp = waveGhostHp(s.wave);
   const dmg = waveGhostDmg(s.wave);
-  s.ghosts = Array.from({ length: n }, (_, i) => ({ hp, maxHp: hp, dmg, id: i }));
+  if (isBossWave(s.wave)) {
+    // Boss 波：1 只 Boss + 减半的常规鬼
+    const bossHp = Math.floor(hp * BOSS_HP_MULT);
+    const bossDmg = Math.floor(dmg * BOSS_DMG_MULT);
+    s.ghosts = [{ hp: bossHp, maxHp: bossHp, dmg: bossDmg, id: 0, boss: true }];
+    const regular = Math.max(4, Math.floor(n * BOSS_QUIET_RATIO));
+    for (let i = 0; i < regular; i++) {
+      s.ghosts.push({ hp, maxHp: hp, dmg, id: i + 1 });
+    }
+  } else {
+    s.ghosts = Array.from({ length: n }, (_, i) => ({ hp, maxHp: hp, dmg, id: i }));
+  }
   s.nextWaveAt = s.time + waveGap(s.wave);
 }
 
@@ -237,6 +450,7 @@ function spawnWave(s) {
  */
 function tick(s, deltaSec) {
   const events = [];
+  dailyRollover(s);
   let t = 0;
   const dt = 1;
   // 失败待处理时冻结（不生产、不出波），等待玩家选择
@@ -251,29 +465,37 @@ function tick(s, deltaSec) {
     const e = expPerSec(s) * step;
     s.coin += c;
     s.totalCoin += c;
+    questProgress(s, 'coin', c);
     if (e > 0) gainExp(s, e);
 
-    // 2) 门自然回血
+    // 2) 门回血（自然 + 祭司）
     const maxHp = doorMaxHp(s);
     if (s.door.hp < maxHp) {
-      s.door.hp = Math.min(maxHp, s.door.hp + maxHp * DOOR_REGEN_PCT * step);
+      const regenPct = DOOR_REGEN_PCT + heroHealTotal(s);
+      s.door.hp = Math.min(maxHp, s.door.hp + maxHp * regenPct * step);
     }
 
     // 3) 波次判定
     if (s.time >= s.nextWaveAt && s.ghosts.length === 0) {
       spawnWave(s);
-      events.push({ type: 'wave_start', wave: s.wave, ghostCount: s.ghosts.length });
+      events.push({
+        type: 'wave_start', wave: s.wave,
+        ghostCount: s.ghosts.length,
+        boss: s.ghosts.some(g => g.boss)
+      });
     }
 
     // 4) 战斗
     if (s.ghosts.length > 0) {
       // 按"实际战斗时长"结算门受击：鬼被打死时即停止攻击
       // killTime = 清光当前鬼所需时间；本秒内鬼死则门只吃等比伤害
+      // 暗影猎手：鬼伤害降低
+      const slow = heroSlowTotal(s);
       const totalGhostHp = s.ghosts.reduce((a, g) => a + g.hp, 0);
       const dps = totalDefendDps(s);
       const killTime = dps > 0 ? totalGhostHp / dps : Infinity;
       const effTime = Math.min(step, killTime);
-      const dmgTaken = s.ghosts.reduce((a, g) => a + g.dmg, 0) * effTime;
+      const dmgTaken = s.ghosts.reduce((a, g) => a + g.dmg, 0) * (1 - slow) * effTime;
       s.door.hp -= dmgTaken;
 
       let dmgDealt = dps * step;
@@ -289,8 +511,13 @@ function tick(s, deltaSec) {
           s.coin += coinR;
           s.totalCoin += coinR;
           s.ghostsKilled += 1;
-          events.push({ type: 'ghost_killed', wave: s.wave });
+          questProgress(s, 'kill', 1);
+          events.push({ type: 'ghost_killed', wave: s.wave, boss: !!g.boss });
           if (!s.firstKill) { s.firstKill = true; events.push({ type: 'first_kill' }); }
+          if (g.boss) {
+            s.bossesKilled += 1;
+            events.push({ type: 'boss_killed', wave: s.wave });
+          }
         }
       }
       s.ghosts = s.ghosts.filter(g => g.hp > 0);
@@ -309,11 +536,13 @@ function tick(s, deltaSec) {
       if (s.ghosts.length === 0) {
         s.wavesCleared += 1;
         const bonus = waveBonus(s.wave);
-        s.soul += bonus;
-        const cBonus = Math.floor(bonus * 1.5);
+        const isBoss = isBossWave(s.wave);
+        const soulBonus = isBoss ? Math.floor(bonus * 5) : bonus;
+        s.soul += soulBonus;
+        const cBonus = Math.floor(soulBonus * 1.5);
         s.coin += cBonus;
         s.totalCoin += cBonus;
-        events.push({ type: 'wave_cleared', wave: s.wave, bonus });
+        events.push({ type: 'wave_cleared', wave: s.wave, bonus: soulBonus, boss: isBoss });
         if (s.wave === 10 && !s.clearedWave10) {
           s.clearedWave10 = true;
           events.push({ type: 'cleared_10' });
@@ -375,6 +604,7 @@ function tryUpgradeBed(s, i) {
   if (s.coin < cost) return { ok: false, msg: `金币不足 (${formatCost(cost)})` };
   s.coin -= cost;
   bed.level += 1;
+  questProgress(s, 'upgrade', 1);
   return { ok: true, cost, level: bed.level };
 }
 
@@ -397,6 +627,7 @@ function tryUpgradeDoor(s) {
   s.coin -= cost;
   s.door.level += 1;
   s.door.hp = doorMaxHp(s);   // 升级回满
+  questProgress(s, 'upgrade', 1);
   return { ok: true, cost, level: s.door.level };
 }
 
@@ -406,6 +637,7 @@ function tryUpgradeTurret(s) {
   if (s.coin < cost) return { ok: false, msg: `金币不足 (${formatCost(cost)})` };
   s.coin -= cost;
   s.turret.level += 1;
+  questProgress(s, 'upgrade', 1);
   return { ok: true, cost, level: s.turret.level };
 }
 
@@ -415,6 +647,7 @@ function tryUpgradeAltar(s) {
   if (s.soul < cost) return { ok: false, msg: `灵魂不足 (${cost})` };
   s.soul -= cost;
   s.altar.level += 1;
+  questProgress(s, 'upgrade', 1);
   return { ok: true, cost, level: s.altar.level };
 }
 
@@ -449,7 +682,11 @@ const AD_COOLDOWN = {
   wave_delay: 10 * 60 * 1000,
   door_fix: 0,
   offline_double: 0,
-  revive: 60 * 1000
+  revive: 60 * 1000,
+  // v0.2 新增
+  daily_bonus: 0,        // 按天限制（canUseAd 中判断）
+  hero_deal: 10 * 60 * 1000,
+  task_reward: 0         // 按任务领取限制（claimQuest 中判断）
 };
 
 function applyAd(s, adKey) {
@@ -478,6 +715,24 @@ function applyAd(s, adKey) {
     case 'offline_double': {
       return { ok: true };
     }
+    // v0.2 新增
+    case 'daily_bonus': {
+      const today = dateStr(Date.now());
+      if (s.daily.lastBonusDate === today) return { ok: false, msg: '今日已领取' };
+      s.daily.lastBonusDate = today;
+      const bonus = Math.max(500, Math.floor(coinPerSec(s) * 600));
+      s.coin += bonus;
+      s.totalCoin += bonus;
+      s.soul += 100;
+      return { ok: true, bonus, soul: 100 };
+    }
+    case 'hero_deal': {
+      s.heroDeal = true;
+      return { ok: true };
+    }
+    case 'task_reward': {
+      return { ok: true };
+    }
   }
   return { ok: false };
 }
@@ -490,6 +745,8 @@ function canUseAd(s, adKey) {
   }
   if (adKey === 'door_fix' && s.door.hp / doorMaxHp(s) >= 0.4) return { ok: false, msg: '大门健康' };
   if (adKey === 'revive' && !s.defeated) return { ok: false, msg: '未失败' };
+  if (adKey === 'daily_bonus' && s.daily.lastBonusDate === dateStr(now)) return { ok: false, msg: '今日已领' };
+  if (adKey === 'hero_deal' && s.heroDeal) return { ok: false, msg: '折扣已持有' };
   return { ok: true };
 }
 
@@ -514,6 +771,15 @@ function load(json) {
     s.ghosts = [];               // 不在存档中保存战斗中间态
     s.adCooldown = s.adCooldown || {};
     if (!s.altar) s.altar = { level: 0 };
+    // v0.2 存档迁移（v0.1 存档兼容）
+    if (!s.heroes || s.heroes.length !== HEROES.length) {
+      s.heroes = HEROES.map(() => ({ unlocked: false, level: 0 }));
+    }
+    if (typeof s.heroDeal !== 'boolean') s.heroDeal = false;
+    if (!s.daily || !s.daily.quests) s.daily = defaultDaily();
+    if (!s.achievements) s.achievements = { claimed: {} };
+    if (typeof s.bossesKilled !== 'number') s.bossesKilled = 0;
+    dailyRollover(s);
     return s;
   } catch (e) {
     return null;
@@ -523,12 +789,20 @@ function load(json) {
 // ================= 导出 =================
 module.exports = {
   MAX_BEDS, OFFLINE_CAP_SEC, BUILDINGS, FIRST_WAVE_AT, CURVE,
-  waveCount, waveGhostHp, waveGhostDmg, waveGap, waveBonus,
+  HEROES, ACHIEVEMENTS, BOSS_EVERY, BOSS_HP_MULT, BOSS_DMG_MULT, HERO_DEAL_PCT,
+  waveCount, waveGhostHp, waveGhostDmg, waveGap, waveBonus, isBossWave,
   newGame, initNewGame,
   expForLevel, gainExp,
   altarMult, incomeMult, bedCoinPerSec, bedExpPerSec, coinPerSec, expPerSec,
   buildingCost, bedCost, doorCost, turretCost, altarCost, unlockBedCost, formatCost,
+  // 英雄
+  heroState, heroDpsOf, heroSlowOf, heroHealOf,
+  heroDpsTotal, heroSlowTotal, heroHealTotal,
+  heroUpgradeCost, tryBuyHero, tryUpgradeHero,
   doorMaxHp, doorCounterDps, turretDps, totalDefendDps, nextWaveThreat,
+  // 任务/成就
+  dateStr, defaultDaily, dailyRollover, questProgress, claimQuest,
+  listAchievements, claimAchievement,
   spawnWave, tick, doDefeat, tryRevive, acceptDefeat,
   tryUpgradeBed, tryUnlockBed, tryUpgradeDoor, tryUpgradeTurret, tryUpgradeAltar,
   computeOffline, applyOffline,
