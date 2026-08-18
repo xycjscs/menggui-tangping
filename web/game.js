@@ -300,6 +300,9 @@
     $('tapTitle').textContent = '';
     $('tapDesc').textContent = '';
     $('tapStats').innerHTML = '';
+    const so = $('tapSlotOptions');
+    so.innerHTML = ''; so.style.display = 'none';
+    $('tapAction').style.display = '';
     let actionText = '', actionFn = null, disabled = false;
 
     if (hit.type === 'bed') {
@@ -390,6 +393,49 @@
         };
         disabled = disabled || s.coin < cost;
       }
+    } else if (hit.type === 'slot') {
+      // v0.5 道具插槽：空槽=选道具放置，已占=拆除
+      const slotIdx = hit.index;
+      const placedId = s.itemSlots ? s.itemSlots[slotIdx] : null;
+      $('tapSlotOptions').innerHTML = '';
+      if (!placedId) {
+        // 空槽：4 种道具选项（图标+名称+价格），点击即放置
+        const box = $('tapSlotOptions');
+        box.style.display = 'grid';
+        core.ITEM_IDS.forEach(id => {
+          const it = core.ITEMS[id];
+          const cost = core.itemPlaceCost(s, id);
+          const can = it.res === 'coin' ? s.coin >= cost : s.soul >= cost;
+          const chip = el('div', 'slot-opt' + (can ? '' : ' slot-opt-poor'));
+          chip.innerHTML = '<span class="slot-opt-ico">' + it.icon + '</span><span class="slot-opt-name">' + it.name + '</span><span class="slot-opt-cost">' + formatNum(cost) + (it.res === 'coin' ? ' 💰' : ' 👻') + '</span>';
+          chip.onclick = () => {
+            const r = core.placeItem(s, slotIdx, id);
+            if (!r.ok) return toast(r.msg);
+            toast(it.icon + ' ' + it.name + ' 已放置');
+            showTapMenu(hit);   // 刷新（现在应显示"拆除"）
+          };
+          box.appendChild(chip);
+        });
+        $('tapTitle').textContent = '放置道具';
+        $('tapDesc').textContent = '选一个放入该位置';
+        $('tapAction').style.display = 'none';
+      } else {
+        // 已占：显示当前道具 + 拆除
+        const it = core.ITEMS[placedId];
+        const info = core.itemSlotInfo(s, slotIdx);
+        $('tapTitle').textContent = it.icon + ' ' + it.name;
+        $('tapDesc').textContent = it.desc;
+        if (placedId === 'barrier') addStat('屏障', formatNum(Math.floor(info.barrierHp || 0)) + '/' + formatNum(info.barrierMax));
+        $('tapAction').style.display = '';
+        actionText = '拆除（不返还）';
+        actionFn = () => {
+          const r = core.removeItem(s, slotIdx);
+          if (!r.ok) return toast(r.msg);
+          toast(it.name + ' 已拆除');
+          showTapMenu(hit);
+        };
+        disabled = false;
+      }
     }
 
     const btn = $('tapAction');
@@ -416,6 +462,7 @@
     else if (hit.type === 'turret') { cx = battle.turretPos.x * sx; cy = battle.turretPos.y * sy; }
     else if (hit.type === 'altar') { cx = battle.altarPos.x * sx; cy = battle.altarPos.y * sy; }
     else if (hit.type === 'hero') { const p = battle.heroPos(hit.index); cx = p.x * sx; cy = p.y * sy; }
+    else if (hit.type === 'slot') { const p = battle.slotPos(hit.index); cx = p.x * sx; cy = p.y * sy; }
     const mask = $('tapMenuMask'), m = $('tapMenu');
     const mw = m.offsetWidth, mh = m.offsetHeight;
     let left = cx + 16; if (left + mw > r.width - 8) left = cx - mw - 16;
