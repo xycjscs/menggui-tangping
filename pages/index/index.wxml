@@ -3,8 +3,8 @@
 <!-- 状态栏占位（自定义导航栏，iPhone 刘海屏不挡内容） -->
 <view class="status-bar" style="height:{{statusBar}}px"></view>
 
-<!-- ============ 屏幕1：首页 ============ -->
-<view class="screen screen-home" wx:if="{{screen==='home'}}">
+<!-- ============ 屏幕1：首页（锁定一屏高度，绝不滚动） ============ -->
+<view class="screen screen-home home-fit" wx:if="{{screen==='home'}}" style="height:calc(100vh - {{statusBar || 0}}px)">
   <view class="home-head">
     <view class="home-title">
       <image class="home-logo" src="/images/sprites/ghost_4.png" mode="aspectFit" />
@@ -22,20 +22,21 @@
     <view class="wallet-claim" bindtap="onDailyBonus">📺 每日福利</view>
   </view>
 
-  <view class="home-section">
+  <view class="home-section levels">
     <view class="section-title">选择关卡 <text class="section-sub">通关解锁下一关</text></view>
     <view class="level-grid">
       <view wx:for="{{levels}}" wx:key="id"
             class="level-card {{item.locked?'locked':''}} {{item.stars?'done':''}}"
             data-id="{{item.id}}" bindtap="onLevelTap">
-        <view class="level-id">第 {{item.id}} 关</view>
-        <view class="level-name">{{item.name}}</view>
-        <view class="level-sub">{{item.sub}}</view>
-        <view class="level-stars">
-          <text wx:for="{{[0,1,2]}}" wx:for-item="si" wx:key="*this"
-                class="star {{si < item.stars ? 'on' : ''}}">{{si < item.stars ? '★' : '☆'}}</text>
+        <view class="level-top">
+          <text class="level-id">第 {{item.id}} 关</text>
+          <view class="level-stars">
+            <text wx:for="{{[0,1,2]}}" wx:for-item="si" wx:key="*this"
+                  class="star {{si < item.stars ? 'on' : ''}}">{{si < item.stars ? '★' : '☆'}}</text>
+          </view>
         </view>
-        <view wx:if="{{item.locked}}" class="level-lock">🔒 通关上一关解锁</view>
+        <view class="level-name">{{item.name}}</view>
+        <view class="level-sub">{{item.locked ? '🔒 通关上一关解锁' : item.sub}}</view>
       </view>
     </view>
   </view>
@@ -51,7 +52,7 @@
       </view>
     </view>
   </view>
-  <view class="footer safe-bottom">猛鬼宿舍·躺平发育 v0.6.0 · 素材 CC0 (Kenney)</view>
+  <view class="footer">猛鬼宿舍·躺平发育 v0.6.1 · 素材 CC0 (Kenney)</view>
 </view>
 
 <!-- ============ 屏幕2：进入页 ============ -->
