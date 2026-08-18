@@ -97,14 +97,15 @@
       const unlocked = LVL.isUnlocked(meta.progress, lv.id);
       const stars = LVL.bestStars(meta.progress, lv.id);
       const card = el('div', 'level-card' + (unlocked ? '' : ' locked') + (stars ? ' done' : ''));
-      const idEl = el('div', 'level-id', '第 ' + lv.id + ' 关');
+      // 紧凑 3 行：关号+星级同行 / 名称 / 副标题（矮屏不裁切）
+      const top = el('div', 'level-top');
+      top.appendChild(el('span', 'level-id', '第 ' + lv.id + ' 关'));
+      const st = el('span', 'level-stars');
+      for (let i = 0; i < 3; i++) st.appendChild(el('i', 'star' + (i < stars ? ' on' : ''), i < stars ? '★' : '☆'));
+      top.appendChild(st);
       const nm = el('div', 'level-name', lv.name);
-      const sub = el('div', 'level-sub', lv.sub);
-      const st = el('div', 'level-stars');
-      for (let i = 0; i < 3; i++) st.appendChild(el('span', 'star' + (i < stars ? ' on' : ''), i < stars ? '★' : '☆'));
-      const lock = unlocked ? null : el('div', 'level-lock', '🔒 通关上一关解锁');
-      card.append(idEl, nm, sub, st);
-      if (lock) card.appendChild(lock);
+      const sub = el('div', 'level-sub', unlocked ? lv.sub : '🔒 通关上一关解锁');
+      card.append(top, nm, sub);
       if (unlocked) card.onclick = () => openEntry(lv);
       grid.appendChild(card);
     });
