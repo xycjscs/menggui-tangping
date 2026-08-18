@@ -25,7 +25,7 @@
     <button class="btn-reset" bindtap="onResetTap">重置存档（不可恢复）</button>
   </view>
 
-  <view class="footer">猛鬼宿舍·躺平发育 v0.2.0</view>
+  <view class="footer">猛鬼宿舍·躺平发育 v0.3.0</view>
 
   <view class="modal-mask" wx:if="{{showResetConfirm}}">
     <view class="modal" catchtap="">
