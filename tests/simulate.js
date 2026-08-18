@@ -682,6 +682,22 @@ const slotHit = bvHit.hitTest(bvHit.slotPos(2).x, bvHit.slotPos(2).y);
 assert(slotHit && slotHit.type === 'slot' && slotHit.index === 2, '命中道具插槽 (slot2)');
 assert(bvHit.hitTest(740, 425) !== null || bvHit.hitTest(-5, -5) === null, '角落命中检测稳定');
 
+// v0.6 触控热区放大（手机端手指点不准小元素）
+const bvTouch = new bv.BattleView({ touch: true });
+// 炮塔：精确模式 r=22，离中心 30px 不应命中炮塔（可能命中重叠的门，但绝不是炮塔）；
+// 触控模式 r=22*1.85≈40.7，30px 内必命中炮塔
+const offT = bvTouch.turretPos.x + 30, offTy = bvTouch.turretPos.y;
+const rExactT = bvHit.hitTest(offT, offTy);
+assert(!rExactT || rExactT.type !== 'turret', '精确模式：炮塔外 30px 不命中炮塔');
+const tT = bvTouch.hitTest(offT, offTy);
+assert(tT && tT.type === 'turret', '触控模式：炮塔外 30px 仍命中（热区放大）');
+// 英雄：精确 r=19，离 28px 不命中英雄；触控 r≈35 应命中英雄
+const offH = bvTouch.heroPos(0).x + 28, offHy = bvTouch.heroPos(0).y;
+const rExactH = bvHit.hitTest(offH, offHy);
+assert(!rExactH || rExactH.type !== 'hero', '精确模式：英雄外 28px 不命中英雄');
+const rTouchH = bvTouch.hitTest(offH, offHy);
+assert(rTouchH && rTouchH.type === 'hero', '触控模式：英雄外 28px 命中英雄');
+
 // ============ 20. v0.5 可放置道具（核心效果）============
 // 放置成本
 const si0 = core.newGame();
