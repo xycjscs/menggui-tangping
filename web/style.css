@@ -1,0 +1,227 @@
+/* 猛鬼宿舍·躺平发育 Web 试玩版 —— 暗色宿舍主题（自 index.wxss 移植） */
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { background: #120e1c; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+
+.page {
+  min-height: 100vh;
+  max-width: 750px;
+  margin: 0 auto;
+  background: linear-gradient(180deg, #1a1626 0%, #221c33 40%, #2a2140 100%);
+  padding: 10px 12px 80px;
+  min-height: 100dvh;
+}
+
+/* ===== 顶部资源栏 ===== */
+.topbar {
+  display: flex; align-items: center; gap: 12px;
+  background: rgba(0,0,0,0.35); border-radius: 10px;
+  padding: 10px 12px; border: 1px solid rgba(255,255,255,0.08);
+}
+.res { display: flex; align-items: center; gap: 4px; }
+.res-ico { width: 22px; height: 22px; }
+.res-num { font-size: 17px; font-weight: 700; color: #ffd75e; font-variant-numeric: tabular-nums; }
+.res-sub { font-size: 11px; color: #9a92b8; }
+.expbar { flex: 1; height: 8px; background: rgba(0,0,0,0.5); border-radius: 4px; overflow: hidden; min-width: 60px; }
+.expbar-fill { height: 100%; background: linear-gradient(90deg, #7c5cff, #b49aff); transition: width .3s; width: 0; }
+.icon-btn { background: none; border: none; font-size: 24px; cursor: pointer; opacity: .8; }
+
+/* ===== 波次横幅 ===== */
+.wave-banner {
+  margin-top: 10px;
+  background: linear-gradient(90deg, rgba(124,92,255,0.25), rgba(80,50,160,0.25));
+  border: 1px solid rgba(150,120,255,0.35); border-radius: 10px;
+  padding: 10px 12px;
+  display: flex; justify-content: space-between; align-items: center;
+  position: relative;
+}
+.wave-banner.danger {
+  background: linear-gradient(90deg, rgba(255,80,80,0.3), rgba(160,40,40,0.3));
+  border-color: rgba(255,120,120,0.5);
+  animation: pulse 1s infinite;
+}
+.wave-banner.boss {
+  background: linear-gradient(90deg, rgba(255,60,120,0.35), rgba(160,30,90,0.35));
+  border-color: rgba(255,120,180,0.6);
+  animation: pulse .8s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.7} }
+.wave-left { display: flex; align-items: center; gap: 6px; }
+.wave-ghost { width: 28px; height: 32px; }
+.wave-title { font-size: 16px; font-weight: 700; color: #e8e2ff; }
+.wave-right { text-align: right; }
+.wave-next { font-size: 13px; color: #ffd75e; display: block; }
+.threat-tag {
+  position: absolute; bottom: -14px; left: 50%; transform: translateX(-50%);
+  font-size: 10px; color: #ff9a9a; white-space: nowrap; background: rgba(26,22,38,.9); padding: 1px 8px; border-radius: 8px;
+}
+.wave-banner.boss .threat-tag { color: #ff7ab8; font-weight: 700; }
+
+/* ===== section ===== */
+.section-title {
+  margin: 22px 0 8px; font-size: 14px; font-weight: 700; color: #b8aee8;
+  display: flex; align-items: center; gap: 6px;
+}
+.section-title::before { content: ''; width: 4px; height: 14px; background: #7c5cff; border-radius: 2px; }
+
+/* ===== 床 ===== */
+.bed-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.bed-card {
+  background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px; padding: 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.bed-card.locked { opacity: .55; border-style: dashed; }
+.bed-img { width: 80px; height: 48px; }
+.bed-lv { font-size: 13px; font-weight: 700; color: #8fe3a0; }
+.bed-cps { font-size: 11px; color: #9a92b8; min-height: 13px; }
+
+/* ===== 按钮 ===== */
+button { font-family: inherit; cursor: pointer; }
+.btn-up {
+  margin-top: 4px;
+  background: linear-gradient(90deg, #5b8def, #7c5cff);
+  color: #fff; font-size: 12px; border-radius: 8px;
+  padding: 0 12px; line-height: 28px; border: none; width: 100%;
+}
+.btn-up:active { transform: scale(.97); }
+.btn-up.disabled { background: #443d5e !important; color: #8a80a8 !important; }
+
+/* ===== 防御 ===== */
+.def-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.def-card {
+  background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px; padding: 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.def-card.altar { margin-top: 8px; background: rgba(124,92,255,0.12); border-color: rgba(150,120,255,0.3); }
+.def-img { width: 40px; height: 40px; }
+.def-info { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.def-name { font-size: 13px; font-weight: 700; color: #e8e2ff; }
+.def-hp { font-size: 11px; color: #9a92b8; }
+.def-dps { font-size: 11px; color: #ffd75e; }
+.hpbar { width: 100%; height: 7px; background: rgba(0,0,0,0.5); border-radius: 4px; overflow: hidden; }
+.hpbar-fill { height: 100%; background: linear-gradient(90deg, #4caf7d, #8fe3a0); transition: width .3s; }
+.hpbar-fill.hp-low { background: linear-gradient(90deg, #e05252, #ff9a9a); }
+.soul-btn { background: linear-gradient(90deg, #9b59ff, #c77dff) !important; }
+
+/* ===== 英雄 ===== */
+.deal-tag {
+  font-size: 10px; color: #ffd75e; font-weight: 400;
+  background: rgba(255,215,94,0.15); border: 1px solid rgba(255,215,94,0.4);
+  border-radius: 6px; padding: 2px 6px;
+}
+.hero-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.hero-card {
+  background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px; padding: 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px; text-align: center;
+}
+.hero-card.locked { opacity: .6; border-style: dashed; }
+.hero-img { width: 36px; height: 36px; }
+.hero-name { font-size: 13px; font-weight: 700; color: #e8e2ff; }
+.hero-type { font-size: 10px; color: #8fe3a0; }
+.hero-desc { font-size: 9px; color: #9a92b8; line-height: 1.3; min-height: 22px; }
+.hero-btn {
+  margin-top: 2px; background: linear-gradient(90deg, #5b8def, #7c5cff);
+  color: #fff; font-size: 11px; border-radius: 7px; padding: 0 10px;
+  line-height: 24px; width: 100%; border: none;
+}
+.hero-btn.disabled { background: #443d5e; color: #8a80a8; }
+
+/* ===== 任务 ===== */
+.quest-date { font-size: 10px; color: #9a92b8; font-weight: 400; }
+.quest-list { display: flex; flex-direction: column; gap: 6px; }
+.quest-item {
+  background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px; padding: 8px 10px;
+  display: flex; align-items: center; gap: 8px;
+}
+.quest-info { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.quest-name { font-size: 13px; font-weight: 700; color: #e8e2ff; }
+.quest-bar { height: 6px; background: rgba(0,0,0,0.5); border-radius: 3px; overflow: hidden; }
+.quest-fill { height: 100%; background: linear-gradient(90deg, #4caf7d, #8fe3a0); transition: width .3s; }
+.quest-progress { font-size: 10px; color: #9a92b8; }
+.btn-quest {
+  background: linear-gradient(90deg, #ff9a3d, #ff6b3d);
+  color: #fff; font-size: 11px; border-radius: 7px; padding: 0 10px;
+  line-height: 28px; border: none; white-space: nowrap;
+}
+.btn-quest.small { font-size: 10px; padding: 0 7px; line-height: 24px; }
+.btn-quest.claimed { background: #3a3450 !important; color: #8a80a8 !important; }
+.btn-quest.disabled { background: #443d5e !important; color: #8a80a8 !important; }
+
+/* ===== 成就 ===== */
+.ach-list { display: flex; flex-direction: column; gap: 6px; }
+.ach-item {
+  background: rgba(0,0,0,0.25); border: 1px solid rgba(255,215,94,0.2);
+  border-radius: 8px; padding: 7px 10px;
+  display: flex; align-items: center; gap: 8px;
+}
+.ach-item.claimed { opacity: .55; }
+.ach-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.ach-name { font-size: 12.5px; font-weight: 700; color: #ffd75e; }
+.ach-name.dim { color: #8a80a8; }
+.ach-desc { font-size: 10px; color: #9a92b8; }
+
+/* ===== 广告 ===== */
+.ad-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ad-card {
+  background: linear-gradient(135deg, rgba(255,180,60,0.15), rgba(255,120,60,0.1));
+  border: 1px solid rgba(255,180,80,0.4); border-radius: 10px;
+  padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  cursor: pointer;
+}
+.ad-card:active { transform: scale(.97); }
+.ad-card.active { border-color: #ffd75e; box-shadow: 0 0 10px rgba(255,215,94,0.3); }
+.ad-card.daily { border-color: rgba(124,92,255,0.5); background: linear-gradient(135deg, rgba(124,92,255,0.18), rgba(255,180,60,0.1)); }
+.ad-ico { width: 32px; height: 32px; }
+.ad-name { font-size: 13px; font-weight: 700; color: #ffd75e; }
+.ad-sub { font-size: 10px; color: #c0b8e0; text-align: center; }
+
+/* ===== footer ===== */
+.footer { margin-top: 20px; text-align: center; font-size: 10px; color: #6a6288; }
+.footer a { color: #7c5cff; }
+
+/* ===== 弹窗 ===== */
+.modal-mask {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center; z-index: 99;
+  padding: 20px;
+}
+.modal {
+  width: 300px; max-width: 90vw;
+  background: linear-gradient(180deg, #2c2545, #221c33);
+  border: 1px solid rgba(150,120,255,0.4); border-radius: 14px;
+  padding: 20px 16px;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+.modal-title { font-size: 18px; font-weight: 700; color: #fff; }
+.modal-title.danger { color: #ff9a9a; }
+.modal-ghost { width: 70px; height: 80px; }
+.modal-line { font-size: 14px; color: #c0b8e0; text-align: center; }
+.modal-warn { font-size: 11px; color: #9a92b8; }
+.hl { color: #ffd75e; font-weight: 700; }
+.btn-primary {
+  background: linear-gradient(90deg, #ff9a3d, #ff6b3d);
+  color: #fff; font-size: 15px; border-radius: 10px; padding: 0 20px;
+  line-height: 42px; width: 100%; border: none;
+}
+.btn-primary:active { transform: scale(.97); }
+.btn-ghost {
+  background: transparent; color: #9a92b8; font-size: 12px;
+  border: 1px solid rgba(255,255,255,0.15); border-radius: 10px;
+  line-height: 38px; width: 100%;
+}
+.ad-modal .ad-count {
+  font-size: 64px; font-weight: 800; color: #ffd75e;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== toast ===== */
+.toast {
+  position: fixed; left: 50%; bottom: 60px; transform: translateX(-50%);
+  background: rgba(0,0,0,0.85); color: #fff; font-size: 13px;
+  padding: 10px 18px; border-radius: 20px; z-index: 200;
+  display: none; max-width: 85vw; text-align: center;
+  border: 1px solid rgba(255,215,94,0.3);
+}

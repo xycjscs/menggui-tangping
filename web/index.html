@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>猛鬼宿舍·躺平发育 - Web 试玩</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page" id="page">
+  <!-- 顶部资源栏 -->
+  <div class="topbar">
+    <div class="res"><img class="res-ico" src="../images/icons/coin.png"><span class="res-num" id="coinText">0</span><span class="res-sub" id="cpsText">+0/s</span></div>
+    <div class="res"><img class="res-ico" src="../images/icons/soul.png"><span class="res-num" id="soulText">0</span><span class="res-sub" id="levelText">Lv.1</span></div>
+    <div class="expbar"><div class="expbar-fill" id="expFill"></div></div>
+    <button class="icon-btn" id="resetBtn" title="重置存档">⚙️</button>
+  </div>
+
+  <!-- 波次横幅 -->
+  <div class="wave-banner" id="waveBanner">
+    <div class="wave-left"><img class="wave-ghost" id="waveGhost" src="../images/sprites/ghost_1.png"><span class="wave-title" id="waveTitle">第 0 波猛鬼</span></div>
+    <div class="wave-right"><span class="wave-next" id="nextWaveText">准备中</span></div>
+    <span class="threat-tag" id="threatTag" style="display:none">危险！建议升级防御</span>
+  </div>
+
+  <!-- 床区 -->
+  <div class="section-title">宿舍 · 躺平床位</div>
+  <div class="bed-grid" id="bedGrid"></div>
+
+  <!-- 防御区 -->
+  <div class="section-title">防御设施</div>
+  <div class="def-row">
+    <div class="def-card">
+      <img class="def-img" id="doorImg" src="../images/tiles/door_1.png">
+      <div class="def-info">
+        <span class="def-name" id="doorName">大门 Lv.1</span>
+        <span class="def-hp" id="doorHp">血 180/180</span>
+        <div class="hpbar"><div class="hpbar-fill" id="doorHpFill" style="width:100%"></div></div>
+        <span class="def-dps" id="doorDps">反击 4/s（含英雄）</span>
+      </div>
+      <button class="btn-up" id="doorBtn">升级</button>
+    </div>
+    <div class="def-card">
+      <img class="def-img" src="../images/icons/turret.png">
+      <div class="def-info">
+        <span class="def-name" id="turretName">炮塔 Lv.0</span>
+        <span class="def-dps" id="turretDps">伤害 0/s</span>
+      </div>
+      <button class="btn-up" id="turretBtn">升级</button>
+    </div>
+  </div>
+  <div class="def-card altar">
+    <img class="def-img" src="../images/icons/sword_gold.png">
+    <div class="def-info">
+      <span class="def-name" id="altarName">灵魂祭坛 Lv.0</span>
+      <span class="def-dps" id="altarBonus">全局产量 +0%</span>
+    </div>
+    <button class="btn-up soul-btn" id="altarBtn">献祭</button>
+  </div>
+
+  <!-- 英雄区 -->
+  <div class="section-title">英雄 <span class="deal-tag" id="dealTag" style="display:none">📺 7折券生效中</span></div>
+  <div class="hero-grid" id="heroGrid"></div>
+
+  <!-- 任务区 -->
+  <div class="section-title">每日任务 <span class="quest-date">每天刷新</span></div>
+  <div class="quest-list" id="questList"></div>
+
+  <!-- 成就区 -->
+  <div class="section-title">成就</div>
+  <div class="ach-list" id="achList"></div>
+
+  <!-- 广告区 -->
+  <div class="section-title">广告福利（Web试玩版：模拟广告，3秒倒计时）</div>
+  <div class="ad-grid" id="adGrid"></div>
+
+  <div class="footer">猛鬼宿舍·躺平发育 v0.2.0 Web试玩版 · 素材 CC0 (Kenney) · <a href="https://github.com/xycjscs/menggui-tangping" target="_blank">源码</a></div>
+</div>
+
+<!-- 离线收益弹窗 -->
+<div class="modal-mask" id="offlineModal" style="display:none">
+  <div class="modal">
+    <div class="modal-title">🌙 离线收益</div>
+    <div class="modal-line">你躺平了 <b class="hl" id="offSec"></b></div>
+    <div class="modal-line">赚得金币 <b class="hl" id="offCoin"></b></div>
+    <div class="modal-warn" id="offCap" style="display:none">（离线收益上限8小时）</div>
+    <button class="btn-primary" id="offDouble">📺 看广告收益x2</button>
+    <button class="btn-ghost" id="offClaim">领取</button>
+  </div>
+</div>
+
+<!-- 门破弹窗 -->
+<div class="modal-mask" id="defeatModal" style="display:none">
+  <div class="modal">
+    <img class="modal-ghost" src="../images/sprites/ghost_4.png">
+    <div class="modal-title danger">👻 大门被撞破！</div>
+    <div class="modal-line" id="defeatWaveText"></div>
+    <button class="btn-primary" id="reviveBtn">📺 看广告立刻复活</button>
+    <button class="btn-ghost" id="acceptBtn">接受失败（灵魂x0.3，床等级减半）</button>
+  </div>
+</div>
+
+<!-- 模拟广告弹窗 -->
+<div class="modal-mask" id="adModal" style="display:none">
+  <div class="modal ad-modal">
+    <div class="modal-title">📺 广告播放中（模拟）</div>
+    <div class="ad-count" id="adCount">3</div>
+    <div class="modal-warn">Web 试玩版无真实广告，倒计时结束自动发奖</div>
+  </div>
+</div>
+
+<!-- 招募确认弹窗 -->
+<div class="modal-mask" id="confirmModal" style="display:none">
+  <div class="modal">
+    <div class="modal-title" id="confirmTitle"></div>
+    <div class="modal-line" id="confirmText" style="white-space:pre-line"></div>
+    <button class="btn-primary" id="confirmOk">确认</button>
+    <button class="btn-ghost" id="confirmCancel">取消</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="bootstrap.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
