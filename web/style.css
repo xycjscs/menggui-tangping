@@ -40,52 +40,58 @@ button { font-family: inherit; cursor: pointer; border: none; }
 .section-title { font-size: 15px; font-weight: 700; color: #c9c0e8; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
 .section-sub { font-size: 12px; font-weight: 400; color: #8a80a8; }
 
-/* ================= 首页 ================= */
-.screen-home { padding: 18px 16px 28px; max-width: 560px; width: 100%; margin: 0 auto; }
-.home-head { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 16px; }
+/* ================= 首页（固定一屏，绝不滚动：关卡网格吸收剩余高度） ================= */
+.screen-home { padding: 10px 16px 8px; max-width: 560px; width: 100%; margin: 0 auto;
+  height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; }
+.home-head { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 8px; flex-shrink: 0; }
 .home-title { display: flex; align-items: center; gap: 12px; }
-.home-logo { width: 56px; height: 56px; filter: drop-shadow(0 4px 10px rgba(200,80,160,.4)); animation: floaty 3s ease-in-out infinite; }
+.home-logo { width: 44px; height: 44px; filter: drop-shadow(0 4px 10px rgba(200,80,160,.4)); animation: floaty 3s ease-in-out infinite; }
 @keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
-.home-title h1 { font-size: 24px; letter-spacing: 1px; background: linear-gradient(90deg,#fff,#b49aff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.home-title h1 { font-size: 21px; letter-spacing: 1px; background: linear-gradient(90deg,#fff,#b49aff); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .home-title p { font-size: 12px; color: #8a80a8; }
 
 .wallet {
-  display: flex; align-items: center; gap: 16px; width: 100%;
+  display: flex; align-items: center; gap: 16px; width: 100%; flex-shrink: 0;
   background: rgba(255,255,255,0.05); border: 1px solid rgba(180,154,255,0.2);
-  border-radius: 14px; padding: 12px 16px; margin-bottom: 18px;
+  border-radius: 14px; padding: 9px 14px; margin-bottom: 10px;
 }
-.wallet .res { display: flex; align-items: center; gap: 7px; font-size: 18px; font-weight: 700; }
-.wallet-claim { margin-left: auto; font-size: 13px; font-weight: 700; padding: 8px 14px; border-radius: 10px;
+.wallet .res { display: flex; align-items: center; gap: 7px; font-size: 16px; font-weight: 700; }
+.wallet-claim { margin-left: auto; font-size: 13px; font-weight: 700; padding: 7px 14px; border-radius: 10px;
   background: linear-gradient(135deg,#ff8a3d,#ffd75e); color: #3a2400; box-shadow: 0 3px 10px rgba(255,150,60,.35); }
 
-.home-section { width: 100%; margin-bottom: 18px; }
-.level-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.home-section { width: 100%; margin-bottom: 10px; flex-shrink: 0; }
+/* 关卡区：flex:1 吃满剩余高度，矮屏时网格自动压行，永不出滚动条 */
+.home-section.levels { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.level-grid { flex: 1 1 auto; min-height: 0; align-content: space-evenly; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: minmax(64px, 120px); gap: 8px; }
 .level-card {
   position: relative; background: rgba(255,255,255,0.05); border: 1px solid rgba(180,154,255,0.22);
-  border-radius: 14px; padding: 12px 12px 10px; transition: transform .12s, border-color .12s;
+  border-radius: 12px; padding: 6px 10px; transition: transform .12s, border-color .12s; overflow: hidden;
 }
 .level-card:active { transform: scale(0.98); border-color: rgba(180,154,255,0.5); }
 .level-card.done { border-color: rgba(120,255,150,0.35); }
 .level-card.locked { opacity: .55; }
-.level-id { font-size: 11px; color: #8a80a8; margin-bottom: 3px; }
-.level-name { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
-.level-sub { font-size: 12px; color: #9a92b8; }
-.level-stars { margin-top: 8px; font-size: 16px; letter-spacing: 2px; }
+/* 紧凑 3 行：关号+星级同行 / 名称 / 副标题（内容总高 ≤60px，矮屏不裁切） */
+.level-top { display: flex; align-items: center; justify-content: space-between; }
+.level-id { font-size: 11px; color: #8a80a8; line-height: 1.25; }
+.level-name { font-size: 14px; font-weight: 700; margin: 2px 0 0; line-height: 1.25;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.level-sub { font-size: 11px; color: #9a92b8; line-height: 1.25;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.level-stars { font-size: 12px; letter-spacing: 1px; font-style: normal; }
 .star { color: #4a4364; } .star.on { color: #ffd75e; text-shadow: 0 0 8px rgba(255,215,94,.6); }
 .star.big { font-size: 30px; letter-spacing: 6px; }
-.level-lock { margin-top: 8px; font-size: 11px; color: #8a80a8; }
 
 .home-ad-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .ad-card {
   background: rgba(255,255,255,0.05); border: 1px solid rgba(180,154,255,0.22);
-  border-radius: 14px; padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  border-radius: 12px; padding: 8px 8px; display: flex; flex-direction: column; align-items: center; gap: 2px;
 }
 .ad-card:active { background: rgba(255,255,255,0.1); }
-.ad-ico { width: 30px; height: 30px; }
-.ad-name { font-size: 14px; font-weight: 700; }
+.ad-ico { width: 24px; height: 24px; }
+.ad-name { font-size: 13px; font-weight: 700; }
 .ad-sub { font-size: 11px; color: #9a92b8; }
 
-.footer { margin-top: auto; padding-top: 18px; font-size: 11px; color: #6a6288; text-align: center; }
+.footer { margin-top: auto; padding-top: 6px; font-size: 11px; color: #6a6288; text-align: center; flex-shrink: 0; }
 
 /* ================= 进入页 ================= */
 .screen-entry { padding: 18px 16px 30px; max-width: 520px; width: 100%; margin: 0 auto; }
