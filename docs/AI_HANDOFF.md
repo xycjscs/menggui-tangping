@@ -5,7 +5,7 @@
 
 ## 1. 一句话项目状态
 
-猛鬼宿舍·躺平发育 v0.6.0 已完成并推送 GitHub（xycjscs/menggui-tangping）。
+猛鬼宿舍·躺平发育 v0.6.1 已完成并推送 GitHub（xycjscs/menggui-tangping）。
 **核心逻辑 200/200 测试通过、3 天数值模拟达标（1091波/0门破/109 Boss全杀）、Web 试玩版线上可玩、小程序手机端适配完成。**
 v0.2 新增：英雄系统(4位) / Boss波(每10波) / 每日任务(3个) / 成就(10个) / 3 个新广告位。
 v0.3 新增：2D 可视化战场（俯视战棋，canvas 60fps，移动怪物，Web/小程序共用 battleView）。
@@ -224,7 +224,7 @@ for (let i=0;i<600;i++){ c.tick(s,1); if(s.defeated) break; }
 // 开发者工具 Console: wx.getStorageSync('menggui_tangping_save_v1')
 ```
 
-## 9. 断点位置（v0.6.0 完成时）
+## 9. 断点位置（v0.6.1 完成时）
 
 - 已完成：v0.1~v0.5 全部功能 + **v0.6 微信小程序手机端适配**
   + 触控热区放大 1.85×（battleView `touch:true`，Web 默认 false 零影响）
@@ -232,11 +232,14 @@ for (let i=0;i<600;i++){ c.tick(s,1); if(s.defeated) break; }
   + 底部图标状态坞（📺快捷奖励/🛏产量/⚔DPS/🚪耐久%，门低弹门菜单）+ 新广告位 `game_bonus`
   + `lazyCodeLoading` 按需注入 + 切后台停 rAF/循环（onHide）+ 回来恢复（onShow）
   + `wx.vibrateShort` 震动反馈 + 微信好友/朋友圈分享
+  + **v0.6.1 首页锁定一屏永不滚动**（容器 100dvh/`100vh-statusBar` + overflow:hidden，
+    关卡区 flex:1 吸收剩余高度，关卡卡紧凑 3 行防裁切；Camofox 三视口实测 overflow=0）
   + 200 断言全绿（+4 条触控热区）+ 文档同步，已推送 GitHub。
 - 卡点：**等用户提供真实小程序 appid + 流量主广告位 ID**
   （需用户注册微信开发者账号/开通流量主操作，AI 无法代劳）
 - 下一个 AI 接手第一步：问用户要 appid 和 adUnitId → 填 config.js
   → 开发者工具**真机预览**（重点：刘海屏顶部不挡 / 底部状态坞不碰 Home Indicator /
+  **首页一屏放完不滚动（SE 类矮屏重点看）** /
   手指点炮塔·英雄·插槽热区是否够大 / 切后台再回来战场是否恢复）→ 提审
 - 若用户说"继续开发"：优先做 **道具种类扩充**（减速雾/护盾/自爆 + 稀有度）
   或 **转生/Prestige 系统**（跨关卡长线成长）
