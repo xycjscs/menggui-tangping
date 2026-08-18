@@ -127,6 +127,7 @@ function menuPos(hit) {
   else if (hit.type === 'turret') { dx = view2.turretPos.x; dy = view2.turretPos.y; }
   else if (hit.type === 'altar') { dx = view2.altarPos.x; dy = view2.altarPos.y; }
   else if (hit.type === 'hero') { const p = view2.heroPos(hit.index); dx = p.x; dy = p.y; }
+  else if (hit.type === 'slot') { const p = view2.slotPos(hit.index); dx = p.x; dy = p.y; }
   const mw = 200, mh = 170;
   let left = canvasRect.left + dx * sx + 16;
   if (left + mw > canvasRect.left + canvasRect.width - 8) left = canvasRect.left + dx * sx - mw - 16;
