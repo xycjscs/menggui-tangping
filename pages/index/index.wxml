@@ -113,7 +113,7 @@
 
   <view class="battle-stage">
     <canvas type="2d" id="battleCanvas" class="battle-canvas" bindtap="onBattleTap"></canvas>
-    <view class="battle-hint {{hintHide?'hide':''}}">点床/门/炮塔/祭坛/英雄 升级 · 点空白处收起</view>
+    <view class="battle-hint {{hintHide?'hide':''}}">点元素升级 · 点 ⬡ 放道具</view>
   </view>
 </view>
 
@@ -124,7 +124,16 @@
   <view wx:for="{{tapMenu.stats}}" wx:key="k" class="tap-stat">
     <text class="tap-stat-k">{{item.k}}</text><text class="tap-stat-v">{{item.v}}</text>
   </view>
-  <button class="btn-primary {{tapMenu.disabled?'disabled':''}}" bindtap="onTapAction">{{tapMenu.action}}</button>
+  <view class="slot-options" wx:if="{{tapMenu.slotOptions.length > 0}}">
+    <view wx:for="{{tapMenu.slotOptions}}" wx:key="id"
+          class="slot-opt {{item.poor ? 'slot-opt-poor' : ''}}"
+          data-id="{{item.id}}" bindtap="onSlotOptTap">
+      <view class="slot-opt-ico">{{item.icon}}</view>
+      <view class="slot-opt-name">{{item.name}}</view>
+      <view class="slot-opt-cost">{{item.cost}}</view>
+    </view>
+  </view>
+  <button class="btn-primary {{tapMenu.disabled?'disabled':''}}" wx:if="{{tapMenu.action}}" bindtap="onTapAction">{{tapMenu.action}}</button>
   <button class="btn-ghost tap-close" bindtap="onTapClose">收起</button>
 </view>
 
