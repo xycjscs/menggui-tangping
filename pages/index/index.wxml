@@ -15,8 +15,11 @@
     <image class="gear" src="/images/icons/ui_gear.png" bindtap="onGoSettings" />
   </view>
 
-  <!-- 猛鬼波次横幅 -->
-  <view class="wave-banner {{threatDanger ? 'danger' : ''}} {{bossActive ? 'boss' : ''}}">
+  <!-- 2D 战场（俯视战棋）：宿舍/大门/炮塔 vs 走廊来袭猛鬼 -->
+  <canvas type="2d" id="battleCanvas" class="battle-canvas"></canvas>
+
+  <!-- 猛鬼波次横幅（信息已并入战场 HUD，隐藏但保留 DOM） -->
+  <view class="wave-banner hidden {{threatDanger ? 'danger' : ''}} {{bossActive ? 'boss' : ''}}">
     <view class="wave-left">
       <image class="wave-ghost" src="{{bossActive ? '/images/sprites/ghost_4.png' : '/images/sprites/ghost_1.png'}}" wx:if="{{wave>0}}"/>
       <text class="wave-title">第 {{wave}} 波猛鬼</text>
@@ -156,7 +159,7 @@
     </view>
   </view>
 
-  <view class="footer">猛鬼宿舍·躺平发育 v0.2.0 · 素材 CC0 (Kenney)</view>
+  <view class="footer">猛鬼宿舍·躺平发育 v0.3.0 · 素材 CC0 (Kenney)</view>
 
   <!-- 离线收益弹窗 -->
   <view class="modal-mask" wx:if="{{showOffline}}" bindtap="onOfflineClose">
