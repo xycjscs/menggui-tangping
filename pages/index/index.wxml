@@ -1,186 +1,160 @@
-<view class="page">
-  <!-- 顶部资源栏 -->
-  <view class="topbar">
-    <view class="res">
-      <image class="res-ico" src="/images/icons/coin.png" />
-      <text class="res-num">{{coinText}}</text>
-      <text class="res-sub">+{{cpsText}}/s</text>
-    </view>
-    <view class="res">
-      <image class="res-ico" src="/images/icons/soul.png" />
-      <text class="res-num">{{soulText}}</text>
-      <text class="res-sub">Lv.{{level}}</text>
-    </view>
-    <view class="expbar"><view class="expbar-fill" style="width:{{expPct}}%"></view></view>
-    <image class="gear" src="/images/icons/ui_gear.png" bindtap="onGoSettings" />
-  </view>
+<!-- 猛鬼宿舍·躺平发育 v0.4 三屏：首页(关卡/奖励/设置) → 进入页(关卡+支援) → 游戏(战场为主,点哪里弹哪里) -->
 
-  <!-- 2D 战场（俯视战棋）：宿舍/大门/炮塔 vs 走廊来袭猛鬼 -->
-  <canvas type="2d" id="battleCanvas" class="battle-canvas"></canvas>
-
-  <!-- 猛鬼波次横幅（信息已并入战场 HUD，隐藏但保留 DOM） -->
-  <view class="wave-banner hidden {{threatDanger ? 'danger' : ''}} {{bossActive ? 'boss' : ''}}">
-    <view class="wave-left">
-      <image class="wave-ghost" src="{{bossActive ? '/images/sprites/ghost_4.png' : '/images/sprites/ghost_1.png'}}" wx:if="{{wave>0}}"/>
-      <text class="wave-title">第 {{wave}} 波猛鬼</text>
-    </view>
-    <view class="wave-right">
-      <text class="wave-next">{{nextWaveText}}</text>
-      <text class="wave-ghosts" wx:if="{{ghostInfo}}">{{ghostInfo}}</text>
-    </view>
-    <text class="threat-tag" wx:if="{{threatDanger}}">危险！建议升级防御</text>
-    <text class="threat-tag boss-tag" wx:if="{{bossActive}}">BOSS 战斗中！</text>
-  </view>
-
-  <!-- 床区 -->
-  <view class="section-title"><text>宿舍 · 躺平床位</text></view>
-  <view class="bed-grid">
-    <view class="bed-card {{bed.unlocked ? '' : 'locked'}}" wx:for="{{beds}}" wx:key="idx">
-      <image class="bed-img" src="/images/sprites/bed.png" />
-      <text class="bed-lv" wx:if="{{item.unlocked}}">Lv.{{item.level}}</text>
-      <text class="bed-lock" wx:else>🔒</text>
-      <text class="bed-cps" wx:if="{{item.unlocked}}">+{{item.cps}}/s</text>
-      <button class="btn-up {{item.canAfford ? '' : 'disabled'}}" bindtap="onUpgradeBed" data-idx="{{item.idx}}">
-        {{item.unlocked ? '升级' : '解锁'}} {{item.costText}}
-      </button>
-    </view>
-  </view>
-
-  <!-- 防御区 -->
-  <view class="section-title"><text>防御设施</text></view>
-  <view class="def-row">
-    <view class="def-card">
-      <image class="def-img" src="/images/tiles/{{door.level>=20?'door_3':door.level>=5?'door_2':'door_1'}}.png" />
-      <view class="def-info">
-        <text class="def-name">大门 Lv.{{door.level}}</text>
-        <text class="def-hp">血 {{door.hpText}}</text>
-        <view class="hpbar"><view class="hpbar-fill {{door.hpPct<35?'hp-low':''}}" style="width:{{door.hpPct}}%"></view></view>
-        <text class="def-dps">反击 {{door.dps}}/s（含英雄）</text>
+<!-- ============ 屏幕1：首页 ============ -->
+<view class="screen screen-home" wx:if="{{screen==='home'}}">
+  <view class="home-head">
+    <view class="home-title">
+      <image class="home-logo" src="/images/sprites/ghost_4.png" mode="aspectFit" />
+      <view>
+        <view class="home-h1">猛鬼宿舍</view>
+        <view class="home-sub">躺平发育 · 关卡挑战</view>
       </view>
-      <button class="btn-up {{door.canAfford?'':'disabled'}}" bindtap="onUpgradeDoor">升级 {{door.costText}}</button>
     </view>
-    <view class="def-card">
-      <image class="def-img" src="/images/icons/turret.png" />
-      <view class="def-info">
-        <text class="def-name">炮塔 Lv.{{turret.level}}</text>
-        <text class="def-dps">伤害 {{turret.dps}}/s</text>
+    <view class="icon-btn" bindtap="onGoSettings">⚙️</view>
+  </view>
+
+  <view class="wallet">
+    <view class="res"><image class="res-ico" src="/images/icons/coin.png" /><text class="res-num">{{walletCoin}}</text></view>
+    <view class="res"><image class="res-ico" src="/images/icons/soul.png" /><text class="res-num">{{walletSoul}}</text></view>
+    <view class="wallet-claim" bindtap="onDailyBonus">📺 每日福利</view>
+  </view>
+
+  <view class="home-section">
+    <view class="section-title">选择关卡 <text class="section-sub">通关解锁下一关</text></view>
+    <view class="level-grid">
+      <view wx:for="{{levels}}" wx:key="id"
+            class="level-card {{item.locked?'locked':''}} {{item.stars?'done':''}}"
+            data-id="{{item.id}}" bindtap="onLevelTap">
+        <view class="level-id">第 {{item.id}} 关</view>
+        <view class="level-name">{{item.name}}</view>
+        <view class="level-sub">{{item.sub}}</view>
+        <view class="level-stars">
+          <text wx:for="{{[0,1,2]}}" wx:for-item="si" wx:key="*this"
+                class="star {{si < item.stars ? 'on' : ''}}">{{si < item.stars ? '★' : '☆'}}</text>
+        </view>
+        <view wx:if="{{item.locked}}" class="level-lock">🔒 通关上一关解锁</view>
       </view>
-      <button class="btn-up {{turret.canAfford?'':'disabled'}}" bindtap="onUpgradeTurret">升级 {{turret.costText}}</button>
     </view>
   </view>
 
-  <!-- 祭坛 -->
-  <view class="def-card altar">
-    <image class="def-img" src="/images/icons/sword_gold.png" />
-    <view class="def-info">
-      <text class="def-name">灵魂祭坛 Lv.{{altar.level}}</text>
-      <text class="def-dps">全局产量 +{{altar.bonus}}%</text>
-    </view>
-    <button class="btn-up soul-btn {{altar.canAfford?'':'disabled'}}" bindtap="onUpgradeAltar">献祭 {{altar.costText}}</button>
-  </view>
-
-  <!-- v0.2 英雄区 -->
-  <view class="section-title">
-    <text>英雄</text>
-    <text class="deal-tag" wx:if="{{heroDealOn}}">📺 7折券生效中</text>
-  </view>
-  <view class="hero-grid">
-    <view class="hero-card {{item.unlocked ? '' : 'locked'}}" wx:for="{{heroes}}" wx:key="id" bindtap="onHeroTap" data-idx="{{item.idx}}">
-      <image class="hero-img" src="{{item.icon}}" />
-      <text class="hero-name">{{item.name}}</text>
-      <text class="hero-type">{{item.typeText}} · Lv.{{item.level}}/{{item.maxLevel}}</text>
-      <text class="hero-desc">{{item.desc}}</text>
-      <text class="hero-btn {{item.canAfford ? '' : 'disabled'}}">
-        {{item.unlocked ? '升级 ' : '招募 '}}{{item.costText}}{{item.costIsSoul ? ' 灵魂' : ''}}
-      </text>
-    </view>
-  </view>
-
-  <!-- v0.2 每日任务 + 成就 -->
-  <view class="section-title"><text>每日任务</text><text class="quest-date">每天刷新</text></view>
-  <view class="quest-list">
-    <view class="quest-item" wx:for="{{quests}}" wx:key="idx">
-      <view class="quest-info">
-        <text class="quest-name">{{item.name}}</text>
-        <view class="quest-bar"><view class="quest-fill" style="width:{{item.done?100:item.progress*100/item.need}}%"></view></view>
-        <text class="quest-progress">{{item.progress}}/{{item.need}} · 奖励 {{item.reward}} 灵魂</text>
+  <view class="home-section">
+    <view class="section-title">广告福利</view>
+    <view class="home-ad-row">
+      <view class="ad-card" bindtap="onWalletCoin">
+        <image class="ad-ico" src="/images/icons/coin.png" /><view class="ad-name">金币红包</view><view class="ad-sub">钱包 +金币</view>
       </view>
-      <button class="btn-quest {{item.claimed ? 'claimed' : (item.done ? '' : 'disabled')}}" bindtap="onQuestClaim" data-idx="{{item.idx}}">
-        {{item.claimed ? '已领取' : '📺 领取'}}
-      </button>
-    </view>
-  </view>
-
-  <view class="section-title"><text>成就</text></view>
-  <view class="ach-list">
-    <view class="ach-item {{item.claimed ? 'claimed' : ''}}" wx:for="{{achievements}}" wx:key="id">
-      <view class="ach-info">
-        <text class="ach-name {{item.unlocked ? '' : 'dim'}}">{{item.unlocked ? '🏅' : '🔒'}} {{item.name}}</text>
-        <text class="ach-desc">{{item.desc}} · 奖励 {{item.reward}} 灵魂</text>
+      <view class="ad-card" bindtap="onWalletSoul">
+        <image class="ad-ico" src="/images/icons/soul.png" /><view class="ad-name">灵魂馈赠</view><view class="ad-sub">钱包 +灵魂</view>
       </view>
-      <button class="btn-quest small {{item.claimed ? 'claimed' : (item.claimable ? '' : 'disabled')}}" bindtap="onAchClaim" data-id="{{item.id}}">
-        {{item.claimed ? '已领取' : (item.claimable ? '领取' : '未达成')}}
-      </button>
     </view>
   </view>
+  <view class="footer">猛鬼宿舍·躺平发育 v0.4.0 · 素材 CC0 (Kenney)</view>
+</view>
 
-  <!-- 广告福利区 -->
-  <view class="section-title"><text>广告福利</text></view>
-  <view class="ad-grid">
-    <view class="ad-card {{boostActive?'active':''}}" bindtap="onAdCoin">
-      <image class="ad-ico" src="/images/icons/coin.png"/>
-      <text class="ad-name">金币红包</text>
-      <text class="ad-sub">{{adCoins.ok?'看广告领金币':adCoins.text}}</text>
+<!-- ============ 屏幕2：进入页 ============ -->
+<view class="screen screen-entry" wx:if="{{screen==='entry'}}">
+  <view class="back-btn" bindtap="onEntryBack">← 返回</view>
+  <view class="entry-card">
+    <view class="entry-badge">关卡 {{currentLevel.id}}</view>
+    <view class="entry-h2">{{currentLevel.name}}</view>
+    <view class="entry-sub">{{currentLevel.sub}}</view>
+    <view class="entry-goal">目标：守住宿舍，清除 <text class="hl">{{currentLevel.wave}}</text> 波猛鬼</view>
+    <view class="entry-stars">
+      <text wx:for="{{[0,1,2]}}" wx:for-item="si" wx:key="*this"
+            class="star big {{si < currentLevel.bestStars ? 'on' : ''}}">{{si < currentLevel.bestStars ? '★' : '☆'}}</text>
     </view>
-    <view class="ad-card {{boostActive?'active':''}}" bindtap="onAdBoost">
-      <image class="ad-ico" src="/images/icons/ui_fast.png"/>
-      <text class="ad-name">双倍收益</text>
-      <text class="ad-sub">{{boostActive?boostText:(adBoost.ok?'1小时产量x2':adBoost.text)}}</text>
-    </view>
-    <view class="ad-card" bindtap="onAdDoor">
-      <image class="ad-ico" src="/images/tiles/door_1.png"/>
-      <text class="ad-name">修复大门</text>
-      <text class="ad-sub">{{adDoor.ok?(door.hpPct<40?'门残血可修复':'门还健康'):adDoor.text}}</text>
-    </view>
-    <view class="ad-card" bindtap="onAdWave">
-      <image class="ad-ico" src="/images/icons/ui_ad.png"/>
-      <text class="ad-name">延迟猛鬼</text>
-      <text class="ad-sub">{{adWave.ok?'猛鬼迟到10分钟':adWave.text}}</text>
-    </view>
-    <view class="ad-card daily" bindtap="onAdDaily">
-      <image class="ad-ico" src="/images/icons/ui_medal1.png"/>
-      <text class="ad-name">每日福利</text>
-      <text class="ad-sub">{{adDaily.ok?'金币+灵魂 每天1次':adDaily.text}}</text>
-    </view>
-    <view class="ad-card" bindtap="onAdHeroDeal">
-      <image class="ad-ico" src="/images/icons/sword_gold.png"/>
-      <text class="ad-name">英雄7折</text>
-      <text class="ad-sub">{{heroDealOn?'折扣生效中':(adHeroDeal.ok?'英雄招募/升级7折':adHeroDeal.text)}}</text>
-    </view>
-  </view>
 
-  <view class="footer">猛鬼宿舍·躺平发育 v0.3.0 · 素材 CC0 (Kenney)</view>
-
-  <!-- 离线收益弹窗 -->
-  <view class="modal-mask" wx:if="{{showOffline}}" bindtap="onOfflineClose">
-    <view class="modal" catchtap="">
-      <text class="modal-title">🌙 离线收益</text>
-      <text class="modal-line">你躺平了 <text class="hl">{{offline.secText}}</text></text>
-      <text class="modal-line">赚得金币 <text class="hl">{{offline.coinText}}</text></text>
-      <text class="modal-warn" wx:if="{{offline.capped}}">（离线收益上限8小时）</text>
-      <button class="btn-primary" bindtap="onOfflineDouble">📺 看广告收益x2</button>
-      <button class="btn-ghost" bindtap="onOfflineClaim">领取</button>
+    <view class="entry-row">
+      <view class="entry-row-label">初始配置</view>
+      <view class="entry-init">
+        <text class="init-chip">💰 {{currentLevel.initCoin}}</text>
+        <text class="init-chip">🏚 大门 Lv.{{currentLevel.door}}</text>
+        <text class="init-chip">🗼 炮塔 Lv.{{currentLevel.turret}}</text>
+        <text class="init-chip">🛏 ×{{currentLevel.beds}}</text>
+        <text wx:if="{{currentLevel.soul>0}}" class="init-chip">👻 {{currentLevel.soul}}</text>
+        <text wx:if="{{currentLevel.heroes}}" class="init-chip">⚔ {{currentLevel.heroes}}</text>
+      </view>
     </view>
-  </view>
 
-  <!-- 门破弹窗 -->
-  <view class="modal-mask" wx:if="{{showDefeat}}">
-    <view class="modal">
-      <image class="modal-ghost" src="/images/sprites/ghost_4.png" />
-      <text class="modal-title danger">👻 大门被撞破！</text>
-      <text class="modal-line">第 {{defeatWave}} 波猛鬼冲进了宿舍…</text>
-      <button class="btn-primary" bindtap="onRevive">📺 看广告立刻复活</button>
-      <button class="btn-ghost" bindtap="onAcceptDefeat">接受失败（灵魂x0.3，床等级减半）</button>
+    <view class="entry-row">
+      <view class="entry-row-label">选择入场支援（免费 · 本局限用）</view>
+      <view class="support-row">
+        <view wx:for="{{supportDefs}}" wx:key="kind"
+              class="support-card {{item.kind===supportPick?'picked':''}}"
+              data-kind="{{item.kind}}" bindtap="onSupportPick">
+          <image class="support-ico" src="/images/{{item.icoDir}}/{{item.icon}}" />
+          <view class="support-name">{{item.name}}</view>
+          <view class="support-desc">{{item.desc}}</view>
+        </view>
+      </view>
     </view>
+
+    <view class="entry-row elite-row {{eliteUsed?'elite-on':''}}" bindtap="onEliteTap">
+      <view class="entry-row-label">💎 精锐支援（钱包金币 · 开局额外资源）</view>
+      <view class="elite-info">
+        <text class="elite-cost">💰 {{eliteCost}}</text>
+        <text class="elite-gain">开局 +{{eliteGainCoin}} 金币 / +{{eliteGainSoul}} 灵魂</text>
+      </view>
+    </view>
+
+    <button class="btn-primary entry-go" bindtap="onEntryGo">进入宿舍 →</button>
+    <view class="entry-warn">门被打破后可看广告复活（每局限 1 次）；认输则本局作废</view>
   </view>
 </view>
+
+<!-- ============ 屏幕3：游戏 ============ -->
+<view class="screen screen-game" wx:if="{{screen==='game'}}">
+  <view class="game-topbar">
+    <view class="icon-btn game-exit" bindtap="onGameExit">☰</view>
+    <view class="game-top-title"><text class="gt-name">关卡 {{currentLevel.id}}</text><text class="gt-prog">{{wavesCleared}}/{{currentLevel.wave}} 波</text></view>
+    <view class="game-top-res"><image class="res-ico" src="/images/icons/coin.png" /><text>{{coinText}}</text></view>
+    <view class="game-top-res"><image class="res-ico" src="/images/icons/soul.png" /><text>{{soulText}}</text></view>
+  </view>
+
+  <view class="battle-stage">
+    <canvas type="2d" id="battleCanvas" class="battle-canvas" bindtap="onBattleTap"></canvas>
+    <view class="battle-hint {{hintHide?'hide':''}}">点床/门/炮塔/祭坛/英雄 升级 · 点空白处收起</view>
+  </view>
+</view>
+
+<!-- 点触菜单 -->
+<view class="tap-menu" wx:if="{{screen==='game' && tapMenu.show}}" style="left:{{tapMenu.x}}px;top:{{tapMenu.y}}px">
+  <view class="tap-menu-title">{{tapMenu.title}}</view>
+  <view class="tap-menu-desc">{{tapMenu.desc}}</view>
+  <view wx:for="{{tapMenu.stats}}" wx:key="k" class="tap-stat">
+    <text class="tap-stat-k">{{item.k}}</text><text class="tap-stat-v">{{item.v}}</text>
+  </view>
+  <button class="btn-primary {{tapMenu.disabled?'disabled':''}}" bindtap="onTapAction">{{tapMenu.action}}</button>
+  <button class="btn-ghost tap-close" bindtap="onTapClose">收起</button>
+</view>
+
+<!-- 胜利结算 -->
+<view class="modal-mask" wx:if="{{winModal.show}}">
+  <view class="modal win-modal">
+    <view class="win-stars">
+      <text wx:for="{{[0,1,2]}}" wx:for-item="si" wx:key="*this"
+            class="win-star {{si < winModal.stars ? 'on' : ''}}">{{si < winModal.stars ? '★' : '☆'}}</text>
+    </view>
+    <view class="modal-title">🏆 关卡通过！</view>
+    <view class="modal-line">{{winModal.line}}</view>
+    <view class="modal-reward">
+      <text class="rw-chip">💰 +{{winModal.coin}}</text>
+      <text class="rw-chip">👻 +{{winModal.soul}}</text>
+    </view>
+    <button class="btn-primary" wx:if="{{winModal.hasNext}}" bindtap="onWinNext">下一关 →</button>
+    <button class="btn-ghost" bindtap="onWinHome">返回首页（再挑战可刷星）</button>
+  </view>
+</view>
+
+<!-- 门破弹窗 -->
+<view class="modal-mask" wx:if="{{defeatModal.show}}">
+  <view class="modal">
+    <image class="modal-ghost" src="/images/sprites/ghost_4.png" />
+    <view class="modal-title danger">👻 大门被撞破！</view>
+    <view class="modal-line">{{defeatModal.text}}</view>
+    <button class="btn-primary" bindtap="onRevive">📺 看广告立刻复活（每局 1 次）</button>
+    <button class="btn-ghost" bindtap="onAcceptDefeat">认输（本局作废，返回首页）</button>
+  </view>
+</view>
+
+<view class="toast" wx:if="{{toastText}}">{{toastText}}</view>
