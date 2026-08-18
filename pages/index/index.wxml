@@ -1,4 +1,7 @@
-<!-- 猛鬼宿舍·躺平发育 v0.4 三屏：首页(关卡/奖励/设置) → 进入页(关卡+支援) → 游戏(战场为主,点哪里弹哪里) -->
+<!-- 猛鬼宿舍·躺平发育 v0.6 小程序三屏（手机端优先：自定义导航栏 + 安全区 + 触控热区 + 图标状态坞） -->
+
+<!-- 状态栏占位（自定义导航栏，iPhone 刘海屏不挡内容） -->
+<view class="status-bar" style="height:{{statusBar}}px"></view>
 
 <!-- ============ 屏幕1：首页 ============ -->
 <view class="screen screen-home" wx:if="{{screen==='home'}}">
@@ -48,7 +51,7 @@
       </view>
     </view>
   </view>
-  <view class="footer">猛鬼宿舍·躺平发育 v0.4.0 · 素材 CC0 (Kenney)</view>
+  <view class="footer safe-bottom">猛鬼宿舍·躺平发育 v0.6.0 · 素材 CC0 (Kenney)</view>
 </view>
 
 <!-- ============ 屏幕2：进入页 ============ -->
@@ -58,7 +61,7 @@
     <view class="entry-badge">关卡 {{currentLevel.id}}</view>
     <view class="entry-h2">{{currentLevel.name}}</view>
     <view class="entry-sub">{{currentLevel.sub}}</view>
-    <view class="entry-goal">目标：守住宿舍，清除 <text class="hl">{{currentLevel.wave}}</text> 波猛鬼</view>
+    <view class="entry-goal">目标：清除 <text class="hl">{{currentLevel.wave}}</text> 波猛鬼</view>
     <view class="entry-stars">
       <text wx:for="{{[0,1,2]}}" wx:for-item="si" wx:key="*this"
             class="star big {{si < currentLevel.bestStars ? 'on' : ''}}">{{si < currentLevel.bestStars ? '★' : '☆'}}</text>
@@ -68,8 +71,8 @@
       <view class="entry-row-label">初始配置</view>
       <view class="entry-init">
         <text class="init-chip">💰 {{currentLevel.initCoin}}</text>
-        <text class="init-chip">🏚 大门 Lv.{{currentLevel.door}}</text>
-        <text class="init-chip">🗼 炮塔 Lv.{{currentLevel.turret}}</text>
+        <text class="init-chip">🚪 Lv.{{currentLevel.door}}</text>
+        <text class="init-chip">🗼 Lv.{{currentLevel.turret}}</text>
         <text class="init-chip">🛏 ×{{currentLevel.beds}}</text>
         <text wx:if="{{currentLevel.soul>0}}" class="init-chip">👻 {{currentLevel.soul}}</text>
         <text wx:if="{{currentLevel.heroes}}" class="init-chip">⚔ {{currentLevel.heroes}}</text>
@@ -77,7 +80,7 @@
     </view>
 
     <view class="entry-row">
-      <view class="entry-row-label">选择入场支援（免费 · 本局限用）</view>
+      <view class="entry-row-label">入场支援（免费 · 本局限用）</view>
       <view class="support-row">
         <view wx:for="{{supportDefs}}" wx:key="kind"
               class="support-card {{item.kind===supportPick?'picked':''}}"
@@ -90,34 +93,54 @@
     </view>
 
     <view class="entry-row elite-row {{eliteUsed?'elite-on':''}}" bindtap="onEliteTap">
-      <view class="entry-row-label">💎 精锐支援（钱包金币 · 开局额外资源）</view>
+      <view class="entry-row-label">💎 精锐支援</view>
       <view class="elite-info">
         <text class="elite-cost">💰 {{eliteCost}}</text>
-        <text class="elite-gain">开局 +{{eliteGainCoin}} 金币 / +{{eliteGainSoul}} 灵魂</text>
+        <text class="elite-gain">+{{eliteGainCoin}}💰 / +{{eliteGainSoul}}👻</text>
       </view>
     </view>
 
     <button class="btn-primary entry-go" bindtap="onEntryGo">进入宿舍 →</button>
-    <view class="entry-warn">门被打破后可看广告复活（每局限 1 次）；认输则本局作废</view>
+    <view class="entry-warn">门破可看广告复活（每局 1 次）</view>
   </view>
 </view>
 
-<!-- ============ 屏幕3：游戏 ============ -->
+<!-- ============ 屏幕3：游戏（画面为主 + 底部图标状态坞） ============ -->
 <view class="screen screen-game" wx:if="{{screen==='game'}}">
   <view class="game-topbar">
     <view class="icon-btn game-exit" bindtap="onGameExit">☰</view>
-    <view class="game-top-title"><text class="gt-name">关卡 {{currentLevel.id}}</text><text class="gt-prog">{{wavesCleared}}/{{currentLevel.wave}} 波</text></view>
+    <view class="game-top-title"><text class="gt-name">关{{currentLevel.id}}</text><text class="gt-prog">{{wavesCleared}}/{{currentLevel.wave}}</text></view>
     <view class="game-top-res"><image class="res-ico" src="/images/icons/coin.png" /><text>{{coinText}}</text></view>
     <view class="game-top-res"><image class="res-ico" src="/images/icons/soul.png" /><text>{{soulText}}</text></view>
   </view>
 
   <view class="battle-stage">
-    <canvas type="2d" id="battleCanvas" class="battle-canvas" bindtap="onBattleTap"></canvas>
+    <canvas type="2d" id="battleCanvas" class="battle-canvas" style="height:{{canvasH}}px" bindtap="onBattleTap"></canvas>
     <view class="battle-hint {{hintHide?'hide':''}}">点元素升级 · 点 ⬡ 放道具</view>
+  </view>
+
+  <!-- 底部图标状态坞（纯图标+数字，少文字；贴 Home Indicator 安全区） -->
+  <view class="dock safe-bottom">
+    <view class="dock-cell {{bonusUsed?'off':''}}" bindtap="onGameBonus">
+      <view class="dock-ico">📺</view>
+      <view class="dock-num">{{bonusUsed?'已用':'+50%'}}</view>
+    </view>
+    <view class="dock-cell" bindtap="onDockStat">
+      <view class="dock-ico">🛏</view>
+      <view class="dock-num">{{cpsText}}/s</view>
+    </view>
+    <view class="dock-cell" bindtap="onDockStat">
+      <view class="dock-ico">⚔</view>
+      <view class="dock-num">{{dpsText}}/s</view>
+    </view>
+    <view class="dock-cell {{doorLow?'low':''}}" bindtap="onDockStat">
+      <view class="dock-ico">🚪</view>
+      <view class="dock-num">{{doorPct}}%</view>
+    </view>
   </view>
 </view>
 
-<!-- 点触菜单 -->
+<!-- 点触菜单（fixed，贴元素定位） -->
 <view class="tap-menu" wx:if="{{screen==='game' && tapMenu.show}}" style="left:{{tapMenu.x}}px;top:{{tapMenu.y}}px">
   <view class="tap-menu-title">{{tapMenu.title}}</view>
   <view class="tap-menu-desc">{{tapMenu.desc}}</view>
