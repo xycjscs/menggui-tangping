@@ -16,7 +16,12 @@
     <button class="icon-btn" id="resetBtn" title="重置存档">⚙️</button>
   </div>
 
-  <!-- 波次横幅 -->
+  <!-- 2D 战场（俯视战棋）：宿舍/大门/炮塔 vs 走廊来袭猛鬼 -->
+  <div class="battle-wrap">
+    <canvas id="battleCanvas" width="750" height="430"></canvas>
+  </div>
+
+  <!-- 波次横幅（信息已并入战场 HUD，视觉冗余故隐藏，保留 DOM 兼容） -->
   <div class="wave-banner" id="waveBanner">
     <div class="wave-left"><img class="wave-ghost" id="waveGhost" src="../images/sprites/ghost_1.png"><span class="wave-title" id="waveTitle">第 0 波猛鬼</span></div>
     <div class="wave-right"><span class="wave-next" id="nextWaveText">准备中</span></div>
@@ -74,7 +79,7 @@
   <div class="section-title">广告福利（Web试玩版：模拟广告，3秒倒计时）</div>
   <div class="ad-grid" id="adGrid"></div>
 
-  <div class="footer">猛鬼宿舍·躺平发育 v0.2.0 Web试玩版 · 素材 CC0 (Kenney) · <a href="https://github.com/xycjscs/menggui-tangping" target="_blank">源码</a></div>
+  <div class="footer">猛鬼宿舍·躺平发育 v0.3.0 Web试玩版 · 素材 CC0 (Kenney) · <a href="https://github.com/xycjscs/menggui-tangping" target="_blank">源码</a></div>
 </div>
 
 <!-- 离线收益弹窗 -->
@@ -122,6 +127,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="bootstrap.js"></script>
+<script src="../js/battle/battleView.js"></script>
 <script src="game.js"></script>
 </body>
 </html>
