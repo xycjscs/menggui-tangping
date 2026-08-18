@@ -4,6 +4,7 @@
 const Game = require('../../js/wx/game');
 const core = require('../../js/core/gameCore');
 const ad = require('../../js/wx/ad');
+const battle = require('../../js/wx/battle');
 const { formatNum, formatDuration } = require('../../js/core/number');
 
 Page({
@@ -74,11 +75,13 @@ Page({
     });
     this.refresh();
     Game.startLoop();
+    // v0.3 2D 战场（canvas 2d，复用 web 同一份 battleView）
+    battle.start(this, Game);
     // 底部 banner 广告（AD_DEBUG 时跳过）
     this._banner = ad.initBanner(wx.getSystemInfoSync().windowHeight);
   },
 
-  onUnload() { Game.stopLoop(); Game.save(); },
+  onUnload() { Game.stopLoop(); Game.save(); battle.stop(); },
   onHide() { Game.save(); },
 
   onGoSettings() { wx.navigateTo({ url: '/pages/settings/settings' }); },
