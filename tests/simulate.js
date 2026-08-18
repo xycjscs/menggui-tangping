@@ -510,8 +510,106 @@ assert(core.canUseAd(sd2, 'hero_deal').ok === false, '7折券10分钟冷却');
 const sd3 = core.newGame();
 assert(core.canUseAd(sd3, 'task_reward').ok === true, '任务奖励广告位可用');
 
-// ============ 16. v0.1 -> v0.2 存档迁移 ============
-section('v0.1 -> v0.2 存档迁移');
+// ============ 17. v0.3 2D 战场渲染层（无头）============
+section('v0.3 战场渲染层');
+const bv = require(path.join(__dirname, '..', 'js', 'battle', 'battleView'));
+// mock 2d context（记录调用，不实际绘制）
+function mockCtx() {
+  const noop = () => {};
+  return new Proxy({}, {
+    get: (t, k) => {
+      if (k === 'canvas') return { width: 750, height: 430 };
+      if (k === 'createLinearGradient' || k === 'createRadialGradient') {
+        return () => ({ addColorStop: noop });
+      }
+      if (k === 'measureText') return () => ({ width: 10 });
+      return noop;
+    },
+    set: () => true
+  });
+}
+// 空 ctx 跑一帧不报错
+let bvView = new bv.BattleView({});
+let sv = core.newGame();
+bvView.frame(bv.makeSnapshot(core, sv), 0.016);
+bvView.render(mockCtx());
+assert(bvView.ghostCount() === 0, '新档无鬼：画布渲染不报错');
+// 出波：鬼入场 -> 列阵 -> 死亡清理
+let sv2 = core.newGame();
+sv2.coin = 1000;
+// 预置防御：门lv4 + 炮塔lv4，保证前 2 波稳过
+for (let i = 0; i < 3; i++) core.tryUpgradeDoor(sv2);
+for (let i = 0; i < 3; i++) core.tryUpgradeTurret(sv2);
+let bv2 = new bv.BattleView({});
+let frames = 0;
+for (let sec = 0; sec < 240; sec++) {
+  core.tick(sv2, 1);
+  // 简单策略：空闲时继续堆炮塔（与 3 天模拟同思路）
+  if (!sv2.ghosts.length && !sv2.defeated && sv2.coin >= core.turretCost(sv2)) {
+    core.tryUpgradeTurret(sv2);
+  }
+  for (let f = 0; f < 10; f++) {   // 每秒 10 帧（模拟 10fps 低配）
+    bv2.frame(bv.makeSnapshot(core, sv2), 0.1);
+    frames++;
+  }
+  if (sec % 10 === 0) bv2.render(mockCtx());
+  if (sv2.wavesCleared >= 2) break;
+}
+// 让死亡动画播完
+for (let f = 0; f < 10; f++) bv2.frame(bv.makeSnapshot(core, sv2), 0.1);
+assert(sv2.wavesCleared >= 2, '模拟中清掉2波 (实际 ' + sv2.wavesCleared + ')');
+assert(frames > 100, '渲染帧循环跑了 ' + frames + ' 帧');
+assert(bv2.ghostCount() === 0, '清波后幽灵全部死亡清理 (剩 ' + bv2.ghostCount() + ')');
+assert(bv2.allFinite(), '所有精灵/粒子坐标有限（无 NaN 泄漏）');
+// 入场 -> 战斗状态机
+let sv3 = core.newGame();
+sv3.wave = 5;
+sv3.time = sv3.nextWaveAt;
+core.tick(sv3, 1);   // 出第6波（无炮塔，鬼长期存活，core 状态冻结不 tick）
+let bv3 = new bv.BattleView({});
+bv3.frame(bv.makeSnapshot(core, sv3), 0.016);
+assert(bv3.ghostCount() === sv3.ghosts.length, '出波后幽灵数量对账一致 (' + bv3.ghostCount() + ')');
+let enterState = false, fightState = false;
+bv3.ghosts.forEach(sp => { if (sp.state === 'enter') enterState = true; });
+for (let f = 0; f < 200; f++) bv3.frame(bv.makeSnapshot(core, sv3), 0.05);
+bv3.ghosts.forEach(sp => { if (sp.state === 'fight') fightState = true; });
+assert(enterState || fightState, '幽灵入场状态机推进');
+assert(fightState, '幽灵推进到门前进入列阵状态');
+// 死亡事件：core 侧移除一只鬼 -> 视图触发死亡动画并最终清理
+let deadId = sv3.ghosts[0].id;
+sv3.ghosts = sv3.ghosts.filter(g => g.id !== deadId);
+bv3.frame(bv.makeSnapshot(core, sv3), 0.016);
+let dyingSp = null;
+bv3.ghosts.forEach(sp => { if (sp.state === 'dying') dyingSp = sp; });
+assert(dyingSp, '鬼死亡触发死亡动画 (dying 状态)');
+assert(bv3.floaters.length > 0, '死亡掉落灵魂/金币飘字');
+for (let f = 0; f < 30; f++) bv3.frame(bv.makeSnapshot(core, sv3), 0.05);
+assert(bv3.ghostCount() === sv3.ghosts.length, '死亡动画结束后精灵清理 (剩 ' + bv3.ghostCount() + ')');
+assert(bv3.allFinite(), '死亡粒子无 NaN');
+// Boss 波快照
+let sv4 = core.newGame();
+sv4.wave = 9; sv4.time = sv4.nextWaveAt;
+sv4.coin = 999999;
+// 防御适中：保证 Boss 在首秒 tick 内不会被打死（dps 远低于 Boss 血量/1s）
+for (let i = 0; i < 3; i++) core.tryUpgradeTurret(sv4);
+core.tryUpgradeDoor(sv4);
+core.tick(sv4, 1);
+let snap4 = bv.makeSnapshot(core, sv4);
+assert(snap4.wave === 10 && snap4.ghosts.some(g => g.boss), '快照识别 Boss 波');
+let bv4 = new bv.BattleView({});
+bv4.frame(snap4, 0.05);
+let bossSp = null, regSp = null;
+bv4.ghosts.forEach(sp => { if (sp.boss) bossSp = sp; else if (!regSp) regSp = sp; });
+assert(bossSp && bossSp.state === 'enter', 'Boss 精灵生成并入场');
+assert(regSp && bossSp.speed < regSp.speed, 'Boss 入场更慢 (62 < 100 px/s)');
+// 失败状态
+let sv5 = core.newGame();
+sv5.defeated = true;
+let bv5 = new bv.BattleView({});
+bv5.frame(bv.makeSnapshot(core, sv5), 0.016);
+assert(bv5.defeatedShown === true, '门破状态触发冲门动画');
+
+// ============ 18. v0.1 -> v0.2 存档迁移 ============
 // 模拟一个没有 v0.2 字段的旧存档
 const oldSave = {
   v: 1, created: Date.now(), lastSave: Date.now(), time: 5000,
