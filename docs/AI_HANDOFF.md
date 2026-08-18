@@ -5,10 +5,11 @@
 
 ## 1. 一句话项目状态
 
-猛鬼宿舍·躺平发育 v0.3.0 已完成并推送 GitHub（xycjscs/menggui-tangping）。
-**核心逻辑 146/146 测试通过、3 天数值模拟达标（1091波/0门破/109 Boss全杀）、Web 试玩版线上可玩、小程序 canvas 战场接入完成。**
-v0.2 新增：英雄系统(4位) / Boss波(每10波) / 每日任务(3个) / 成就(10个) / 每日福利+英雄7折+任务领奖(3个新广告位)。
-**v0.3 新增：2D 可视化战场（俯视战棋，canvas 60fps）——猛鬼从走廊走出/推进/突刺、炮塔曳光弹、Boss 红圈、门震屏。渲染层 `js/battle/battleView.js` 环境无关，Web/小程序共用，核心数值零改动。**
+猛鬼宿舍·躺平发育 v0.4.0 已完成并推送 GitHub（xycjscs/menggui-tangping）。
+**核心逻辑 169/169 测试通过、3 天数值模拟达标（1091波/0门破/109 Boss全杀）、Web 试玩版线上可玩、小程序三屏接入完成。**
+v0.2 新增：英雄系统(4位) / Boss波(每10波) / 每日任务(3个) / 成就(10个) / 3 个新广告位。
+v0.3 新增：2D 可视化战场（俯视战棋，canvas 60fps，移动怪物，Web/小程序共用 battleView）。
+**v0.4 新增：三屏游戏流程（首页关卡选择/长效钱包/奖励 → 进入页关卡详情+支援 → 游戏屏战场为主+点触菜单）+ 关卡制（8 关，通关解锁+星级）+ 点床/门/炮塔/祭坛/英雄弹上下文菜单。新增 js/levels.js + battleView.hitTest，核心数值零改动。**
 下一步是：填真实广告位 ID + appid → 开发者工具调 UI → 提审上线。详见 §6 待办清单。
 
 ## 2. 快速上手（断点恢复 SOP）
@@ -46,14 +47,15 @@ menggui-tangping/
 │   │   ├── gameCore.js              # ★★ 核心逻辑（纯JS无wx，Node可跑）
 │   │   └── number.js                # 数字格式化
 │   ├── battle/
-│   │   └── battleView.js            # ★★★ v0.3 2D 战场渲染层（环境无关，Web/小程序共用）
+│   │   └── battleView.js            # ★★★ 2D 战场渲染层（环境无关，Web/小程序共用）+ hitTest 命中检测
 │   └── wx/
 │       ├── game.js                  # Game 单例：封装 core + 存档 + 1s tick 循环
 │       ├── ad.js                    # 广告统一入口 playRewardAd(key, ok, fail)
-│       └── battle.js                # v0.3 小程序 canvas 2d 接入（rAF 循环 + 素材预加载）
+│       └── battle.js                # 小程序 canvas 2d 接入（rAF 循环 + 素材预加载 + tapPoint/menuPos）
+├── js/levels.js                     # v0.4 关卡数据模块（UMD，8 关+解锁/星级/支援，Node 可测）
 ├── web/                              # Web 试玩版（GitHub Pages 线上）
 │   ├── index.html / game.js / style.css / bootstrap.js
-│   └── 与小程序共用 js/core + js/battle（bootstrap.js fetch 加载，零分叉）
+│   └── 三屏流程（首页/进入页/游戏）+ 点触菜单，与小程序共用 js/core + js/battle + js/levels
 ├── images/                          # CC0 素材（Kenney）
 │   ├── tiles/    # 门x3/地板/砖/草/树
 │   ├── icons/    # 金币/灵魂/炮塔/剑/UI图标
@@ -145,6 +147,17 @@ menggui-tangping/
     "清档重开"其实带着旧状态。测新档用 `?fresh=1` 强制清，或直接改 state 字段注入目标场景。
 15. **v0.3 阵型顶行被 HUD 遮挡**：走廊首行 y 太靠上，Boss 血条/标签被顶部 HUD 盖住。
     `ghostSlot` 整体下移 0.12 格 + 血条/标签 `y = max(y, hudH+9)` 双保险钳位。
+16. **v0.4 Web bootstrap 异步竞态**：`bootstrap.js` 用 `fetch` 异步加载 core/number 并派发 `core-modules-ready`。
+    `game.js` 的 `init()` 不等该事件直接跑 → `window.num` 未定义、`bindModules` 抛错、首页关卡网格空白（且无报错弹窗）。
+    修复：`boot()` 先判 `window.core && window.num`，否则监听 `core-modules-ready` 再 init，加 8s 兜底。
+17. **v0.4 精锐支援状态被重置**：`startLevel` 里 `eliteUsed = false` 重置发生在读取"是否启用"之后 → 精锐永不生效。
+    修复：先 `wantElite = eliteUsed` 捕获，再重置，用 `wantElite` 决定扣钱包+加资源。
+18. **v0.4 点触菜单坐标换算**：canvas 设计空间是 750×430，但屏幕实际尺寸不同。
+    点击/菜单定位都必须按 `getBoundingClientRect`（Web）/ canvas `boundingClientRect`（小程序）换算，并做边界钳位。
+    `battleView.hitTest` 吃设计坐标，`positionTapMenu`/`menuPos` 吐屏幕坐标，别混。
+19. **v0.4 关卡 ≠ 核心改动**：关卡制（初始资源/胜利波数/星级/钱包）是**控制器层**概念，
+    核心 `gameCore.js` 数值**零改动**（`newGame()` 再按关卡配置覆盖字段即可开局）。
+    别为了做关卡去动 CURVE / 波次曲线——那会破坏 169 条数值测试保证的节奏。
 
 ## 6. 待办清单（按优先级）
 
@@ -209,20 +222,25 @@ for (let i=0;i<600;i++){ c.tick(s,1); if(s.defeated) break; }
 // 开发者工具 Console: wx.getStorageSync('menggui_tangping_save_v1')
 ```
 
-## 9. 断点位置（v0.3.0 完成时）
+## 9. 断点位置（v0.4.0 完成时）
 
-- 已完成：v0.1/v0.2 全部功能 + **v0.3 2D 可视化战场**（俯视战棋，移动怪物，canvas 60fps）
-  + 146 断言全绿（新增 16 条战场渲染层无头测试）+ Web/小程序共用 battleView
-  + Web 试玩版线上可玩（Camofox 实测：移动怪物/炮塔曳光/Boss波/门破 全部验证）+ 3 文档同步更新，已推送 GitHub。
+- 已完成：v0.1/v0.2/v0.3 全部功能 + **v0.4 三屏游戏流程**（首页关卡选择/长效钱包/奖励 → 进入页关卡详情+支援 → 游戏屏战场为主+点触菜单）
+  + **关卡制**（8 关，通关解锁+星级评价，门破复活/认输）+ 169 断言全绿（新增 23 条关卡/hitTest 测试）
+  + Web/小程序共用 `js/levels.js` + `js/battle/battleView.js`（含 hitTest）+ 核心数值零改动
+  + Web 试玩版线上可玩（Camofox 实测三屏+点触菜单+通关结算全部验证）+ 文档同步更新，已推送 GitHub。
 - 卡点：**等用户提供真实小程序 appid + 流量主 10 个广告位 ID**
   （需用户注册微信开发者账号/开通流量主操作，AI 无法代劳）
 - 下一个 AI 接手第一步：问用户要 appid 和 adUnitId → 填 config.js
-  → 开发者工具验证（重点看 canvas 战场在真机的渲染性能与清晰度）→ 提审
-- 若用户说"继续开发"：优先做 P1 的**转生/Prestige 系统**
-  （v0.2 的鬼血量软上限是临时方案，转生才是长线终局答案；
-  参考实现：累计击杀/波次换"转生点"，转生点提供全局乘数，清档不清乘数）
-- **战场改动守则**：只动 `js/battle/battleView.js`（观感）；数值只动 `gameCore.js` 的 CURVE。
-  两者绝不互相 import 写操作。改完必跑 `node tests/simulate.js`（146 全绿）。
+  → 开发者工具验证（重点：三屏切换 / 点触菜单在真机的点击命中与定位 / canvas 战场性能）→ 提审
+- 若用户说"继续开发"：优先做 P1 的**转生/Prestige 系统**（跨关卡长线成长；
+  参考：累计通关数/星级换"转生点"，转生点提供全局乘数，清档不清乘数）
+  或**战场手动操作**（点选目标/拖拽炮塔，真·战棋）
+- **改动守则**：
+  - 战场观感 → 只动 `js/battle/battleView.js`；点触命中 → `hitTest`
+  - 数值/曲线 → 只动 `js/core/gameCore.js` 的 CURVE
+  - 关卡配置 → 只动 `js/levels.js`（别动核心）
+  - 三屏 UI 逻辑 → `web/game.js`（Web）+ `pages/index/index.js`（小程序），两端保持同架构
+  - 改完必跑 `node tests/simulate.js`（169 全绿）
 
 ## ⭐ GitHub Pages 试玩版（2026-08-18 上线，成功方法）
 
