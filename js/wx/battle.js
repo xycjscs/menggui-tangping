@@ -46,14 +46,19 @@ function start(page, _stateFn, getStateFn) {
         }
         canvas = res[0].node;
         ctx = canvas.getContext('2d');
-        try { dpr = wx.getSystemInfoSync().pixelRatio || 1; } catch (e) { dpr = 1; }
+        // dpr 封顶 2：手机端 3x 屏全分辨率画 750×430 战场会爆帧，2x 已足够清晰
+        dpr = 1;
+        try {
+          var si = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync();
+          dpr = Math.min(2, si.pixelRatio || 1);
+        } catch (e) { dpr = 1; }
         canvas.width = Math.floor(res[0].width * dpr);
         canvas.height = Math.floor(res[0].height * dpr);
         // 画布页面坐标（点触菜单定位用）
         page.createSelectorQuery().select('#battleCanvas').boundingClientRect(rect => {
           canvasRect = rect;
         }).exec();
-        if (!view) view = new bv.BattleView({ formatNum: formatNum });
+        if (!view) view = new bv.BattleView({ formatNum: formatNum, touch: true });
         view.resize(W, H);
         view.reset();
         loadImages(() => {
