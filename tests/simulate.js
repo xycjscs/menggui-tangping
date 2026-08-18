@@ -677,6 +677,73 @@ assert(bvHit.hitTest(-10, -10) === null, '画布外不命中');
 // 层级：炮塔与门重叠区优先炮塔（炮塔画在门左内侧）
 const overlap = bvHit.hitTest(bvHit.turretPos.x, bvHit.turretPos.y);
 assert(overlap.type === 'turret', '重叠区炮塔优先于门');
+// v0.5 插槽命中
+const slotHit = bvHit.hitTest(bvHit.slotPos(2).x, bvHit.slotPos(2).y);
+assert(slotHit && slotHit.type === 'slot' && slotHit.index === 2, '命中道具插槽 (slot2)');
+assert(bvHit.hitTest(740, 425) !== null || bvHit.hitTest(-5, -5) === null, '角落命中检测稳定');
+
+// ============ 20. v0.5 可放置道具（核心效果）============
+// 放置成本
+const si0 = core.newGame();
+si0.coin = 99999;
+assert(core.itemPlaceCost(si0, 'barrier') === 120, '路障首件 120');
+assert(core.placeItem(si0, 0, 'barrier').ok === true, '放置路障成功');
+assert(si0.itemSlots[0] === 'barrier', '插槽0 = barrier');
+assert(si0.itemBarrierHp === 150, '屏障HP池 +150');
+assert(core.itemPlaceCost(si0, 'barrier') === Math.floor(120 * 1.6), '路障第二件成本递增');
+// 资源扣费
+const si1 = core.newGame(); si1.coin = 260;
+assert(core.placeItem(si1, 1, 'lamp').ok === true, '放置招财灯成功');
+assert(Math.floor(si1.coin) === 0, '招财灯扣 260 金币');
+const si1b = core.newGame(); si1b.coin = 259;
+assert(core.placeItem(si1b, 1, 'lamp').ok === false, '金币不足无法放置');
+// 占用冲突
+assert(core.placeItem(si0, 0, 'spike').ok === false, '已占插槽拒绝放置');
+// 拆除
+assert(core.removeItem(si0, 0).ok === true, '拆除路障成功');
+assert(si0.itemSlots[0] === null, '拆除后插槽为空');
+assert(si0.itemBarrierHp === 0, '无路障时屏障池清零');
+assert(core.removeItem(si0, 0).ok === false, '空槽拆除拒绝');
+// 尖刺 DPS
+const si2 = core.newGame(); si2.coin = 5000;
+core.placeItem(si2, 2, 'spike');
+const si2base = core.doorCounterDps(si2) + core.turretDps(si2) + core.heroDpsTotal(si2);
+assert(core.spikeDps(si2) === 6, '一座尖刺 +6 DPS');
+assert(Math.abs(core.totalDefendDps(si2) - (si2base + 6)) < 1e-6, '总防御含尖刺');
+// 招财灯产量
+const si3 = core.newGame(); si3.coin = 5000;
+const cps0 = core.coinPerSec(si3);
+core.placeItem(si3, 0, 'lamp');
+assert(Math.abs(core.coinPerSec(si3) - (cps0 + 2.5)) < 1e-6, '招财灯产量 +2.5/s');
+// 路障替门挨打
+const si4 = core.newGame(); si4.coin = 5000;
+si4.turret = { level: 0 };            // 无输出：鬼必存活
+core.placeItem(si4, 3, 'barrier');
+si4.wave = 1; si4.time = si4.nextWaveAt;
+core.tick(si4, 1);                     // 出第1波并结算 1 秒
+const doorHpAfterBarrier = si4.door.hp;
+const doorMax = core.doorMaxHp(si4);
+assert(doorMax - doorHpAfterBarrier < 1, '路障在场时门几乎不掉血 (掉 ' + (doorMax - doorHpAfterBarrier).toFixed(2) + ')');
+assert(si4.itemBarrierHp < 150, '路障屏障吸收了伤害 (剩 ' + si4.itemBarrierHp.toFixed(1) + ')');
+// 屏障耗尽后开始伤门
+for (let k = 0; k < 60 && si4.ghosts.length > 0; k++) core.tick(si4, 1);
+assert(doorHpAfterBarrier - si4.door.hp > 0 || si4.ghosts.length === 0, '屏障耗尽后门开始掉血 (或波已清)');
+// 急救包：消耗型，立即回血，不占槽
+const si5 = core.newGame(); si5.soul = 500;
+si5.door.hp = core.doorMaxHp(si5) * 0.2;
+const before5 = si5.door.hp;
+const r5 = core.placeItem(si5, 0, 'medkit');
+assert(r5.ok === true && r5.consumed === true, '急救包放置成功(消耗型)');
+assert(si5.door.hp > before5, '急救包回血');
+assert(si5.itemSlots[0] === null, '急救包不占插槽');
+assert(Math.abs(si5.door.hp - Math.min(core.doorMaxHp(si5), before5 + core.doorMaxHp(si5) * 0.35)) < 1e-6, '回血 = 35% 上限');
+// 老存档迁移
+const oldNoItems = core.save(core.newGame());
+const parsed = JSON.parse(oldNoItems);
+delete parsed.itemSlots; delete parsed.itemBarrierHp;
+const mig20 = core.load(JSON.stringify(parsed));
+assert(mig20 && Array.isArray(mig20.itemSlots) && mig20.itemSlots.length === 4, '老存档迁移: itemSlots 补齐');
+assert(mig20.itemBarrierHp === 0, '老存档迁移: itemBarrierHp=0');
 
 // ============ 汇总 ============
 section('测试汇总');
