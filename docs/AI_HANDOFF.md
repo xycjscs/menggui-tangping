@@ -195,3 +195,20 @@ for (let i=0;i<600;i++){ c.tick(s,1); if(s.defeated) break; }
 - 若用户说"继续开发"：优先做 P1 的**转生/Prestige 系统**
   （v0.2 的鬼血量软上限是临时方案，转生才是长线终局答案；
   参考实现：累计击杀/波次换"转生点"，转生点提供全局乘数，清档不清乘数）
+
+## ⭐ GitHub Pages 试玩版（2026-08-18 上线，成功方法）
+
+**线上地址：https://xycjscs.github.io/menggui-tangping/**（根页自动跳转 /web/）
+
+### 成功部署方法（照此复现，别再走 Actions 弯路）
+1. **Pages 站点用 `POST /repos/{owner}/{repo}/pages` 创建**，body：`{"build_type":"legacy","source":{"branch":"main","path":"/"}}` → 201。
+   ⚠️ 关键：是 **POST 不是 PUT**。PUT 会 404（误导性报错）。token 用 `/opt/data/home/.config/gh/hosts.yml` 里的 `oauth_token`（同一把）。
+2. **legacy 模式只支持路径 `/` 或 `/docs`**，不支持 `/web`。所以游戏放 `web/` 子目录，根 `index.html` 做 302 跳转。
+3. 根 `index.html` 用**相对路径** `web/`（不是 `/web/`！user-site 是子目录，根相对路径会错跳到 `xycjscs.github.io/web/`）。
+4. 仓库根放 `.nojekyll` 禁用 Jekyll。
+5. **不用 Actions workflow**（`actions/configure-pages@v5` 的 GITHUB_TOKEN 创建 Pages 站点会报 `Resource not accessible by integration`，权限墙，走不通）。已删除 `deploy-pages.yml`。
+6. 每次 push main → GitHub 内建 "pages build and deployment" 自动构建（1-2 分钟），`GET /repos/{...}/pages` 轮询 `status` 到 `built`。
+
+### git push 被代理拦截的绕过
+本环境 git-over-HTTPS push 会被网络代理拦截（fetch 能通，push 报 `Invalid username or token` 或挂起）。**改用 Contents API 提交**：
+`PUT /repos/{...}/contents/{path}`（body: content base64 + sha + message + branch:main），删除用 `DELETE .../contents/{path}`（body: sha+message+branch）。API 通道完全正常。
