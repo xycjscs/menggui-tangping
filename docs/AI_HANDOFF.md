@@ -5,10 +5,11 @@
 
 ## 1. 一句话项目状态
 
-猛鬼宿舍·躺平发育 v0.2.0 已完成并推送 GitHub（xycjscs/menggui-tangping）。
-**核心逻辑 130/130 测试通过、3 天数值模拟达标（1091波/0门破/109 Boss全杀）、小程序 UI 完成、广告 10 点位接入（调试模式）。**
+猛鬼宿舍·躺平发育 v0.3.0 已完成并推送 GitHub（xycjscs/menggui-tangping）。
+**核心逻辑 146/146 测试通过、3 天数值模拟达标（1091波/0门破/109 Boss全杀）、Web 试玩版线上可玩、小程序 canvas 战场接入完成。**
 v0.2 新增：英雄系统(4位) / Boss波(每10波) / 每日任务(3个) / 成就(10个) / 每日福利+英雄7折+任务领奖(3个新广告位)。
-下一步是：填真实广告位 ID → 开发者工具调 UI → 提审上线。详见 §6 待办清单。
+**v0.3 新增：2D 可视化战场（俯视战棋，canvas 60fps）——猛鬼从走廊走出/推进/突刺、炮塔曳光弹、Boss 红圈、门震屏。渲染层 `js/battle/battleView.js` 环境无关，Web/小程序共用，核心数值零改动。**
+下一步是：填真实广告位 ID + appid → 开发者工具调 UI → 提审上线。详见 §6 待办清单。
 
 ## 2. 快速上手（断点恢复 SOP）
 
@@ -44,9 +45,15 @@ menggui-tangping/
 │   ├── core/
 │   │   ├── gameCore.js              # ★★ 核心逻辑（纯JS无wx，Node可跑）
 │   │   └── number.js                # 数字格式化
+│   ├── battle/
+│   │   └── battleView.js            # ★★★ v0.3 2D 战场渲染层（环境无关，Web/小程序共用）
 │   └── wx/
 │       ├── game.js                  # Game 单例：封装 core + 存档 + 1s tick 循环
-│       └── ad.js                    # 广告统一入口 playRewardAd(key, ok, fail)
+│       ├── ad.js                    # 广告统一入口 playRewardAd(key, ok, fail)
+│       └── battle.js                # v0.3 小程序 canvas 2d 接入（rAF 循环 + 素材预加载）
+├── web/                              # Web 试玩版（GitHub Pages 线上）
+│   ├── index.html / game.js / style.css / bootstrap.js
+│   └── 与小程序共用 js/core + js/battle（bootstrap.js fetch 加载，零分叉）
 ├── images/                          # CC0 素材（Kenney）
 │   ├── tiles/    # 门x3/地板/砖/草/树
 │   ├── icons/    # 金币/灵魂/炮塔/剑/UI图标
@@ -88,6 +95,14 @@ menggui-tangping/
    数值参数集中在 `HEROES` 数组顶部，调参不用找函数。
 8. **v0.2 每日任务用 `dateStr(Date.now())` 字符串比对**（yyyy-m-d 本地时区），
    跨天检测放在 `tick()` 开头的 `dailyRollover()`，不单独设定时器 → 放置游戏最稳。
+9. **v0.3 渲染层与核心彻底解耦**（`js/battle/battleView.js`）：渲染层**只读** core 状态
+   （`makeSnapshot` 每帧拷贝必要字段），**绝不写回**任何数值。战斗视觉用 `key = wave*100+id`
+   与 `s.ghosts` 对账：新增 id=入场、hp 下降=受击、id 消失=死亡。
+   胜负/血量/奖励 100% 由 core 决定，**视觉不反噬数值**（这样 146 条数值测试能 100% 保证战场改动没碰逻辑）。
+   同一份 battleView 给 Web（canvas 2d + HTMLImage）和小程序（canvas type="2d" + createImage）复用。
+   **铁律：改战斗观感只动 battleView；改数值只动 gameCore 的 CURVE。两者不得互相 import 对方的写操作。**
+10. **v0.3 战场布局是"设计空间 750×430 等比缩放"**：所有坐标用 `this.W/this.H` 相对计算（`_layout`），
+    `resize(w,h)` 后整体等比，所以手机竖屏/横屏/PC 都清晰。改布局比例只动 `_layout` 的系数。
 
 ## 5. 已踩的坑（血泪教训，别重蹈）
 
@@ -120,6 +135,16 @@ menggui-tangping/
 10. **v0.2 测试顶层变量命名冲突**：tests/simulate.js 是单文件顶层作用域，
     新增区块的 const 变量名（如 coinBefore）可能与旧区块重名 → SyntaxError。
     新变量加区块前缀（coinQBefore）。
+11. **v0.3 幽灵对账 key 缺波次前缀**：`makeSprite` 最初 `key: g.id`，跨波次 id 会重复（每波 id 都从 0 起），
+    导致旧波残影/新波撞键。必须 `key = wave*100+id` 并在 frame 对账处一致。
+12. **v0.3 UMD 全局名大小写**：battleView 导出 `window.BattleView`（大写 B）。Web 端误写 `window.battleView`
+    → 渲染循环每帧抛 TypeError、canvas 全空白且无报错弹窗。加载后务必验证 `window.BattleView` 存在。
+13. **v0.3 CSS 覆盖顺序**：隐藏旧 `.wave-banner`（`display:flex`）的新规则 `display:none` 必须写在原规则**之后**
+    （同特异性后者胜），否则无效。稳妥加 `!important`。
+14. **v0.3 测试页 beforeunload 自动存档**：Camofox 里 navigate/reload 会触发 `beforeunload` 把 localStorage 存回，
+    "清档重开"其实带着旧状态。测新档用 `?fresh=1` 强制清，或直接改 state 字段注入目标场景。
+15. **v0.3 阵型顶行被 HUD 遮挡**：走廊首行 y 太靠上，Boss 血条/标签被顶部 HUD 盖住。
+    `ghostSlot` 整体下移 0.12 格 + 血条/标签 `y = max(y, hudH+9)` 双保险钳位。
 
 ## 6. 待办清单（按优先级）
 
@@ -184,17 +209,20 @@ for (let i=0;i<600;i++){ c.tick(s,1); if(s.defeated) break; }
 // 开发者工具 Console: wx.getStorageSync('menggui_tangping_save_v1')
 ```
 
-## 9. 断点位置（v0.2.0 完成时）
+## 9. 断点位置（v0.3.0 完成时）
 
-- 已完成：v0.1 全部功能 + v0.2 四大系统（英雄/Boss/任务/成就）+ 3 个新广告位
-  + 终局软上限修复 + 130 断言全绿 + 3 文档同步更新，已推送 GitHub。
+- 已完成：v0.1/v0.2 全部功能 + **v0.3 2D 可视化战场**（俯视战棋，移动怪物，canvas 60fps）
+  + 146 断言全绿（新增 16 条战场渲染层无头测试）+ Web/小程序共用 battleView
+  + Web 试玩版线上可玩（Camofox 实测：移动怪物/炮塔曳光/Boss波/门破 全部验证）+ 3 文档同步更新，已推送 GitHub。
 - 卡点：**等用户提供真实小程序 appid + 流量主 10 个广告位 ID**
   （需用户注册微信开发者账号/开通流量主操作，AI 无法代劳）
 - 下一个 AI 接手第一步：问用户要 appid 和 adUnitId → 填 config.js
-  → 开发者工具验证 → 提审
+  → 开发者工具验证（重点看 canvas 战场在真机的渲染性能与清晰度）→ 提审
 - 若用户说"继续开发"：优先做 P1 的**转生/Prestige 系统**
   （v0.2 的鬼血量软上限是临时方案，转生才是长线终局答案；
   参考实现：累计击杀/波次换"转生点"，转生点提供全局乘数，清档不清乘数）
+- **战场改动守则**：只动 `js/battle/battleView.js`（观感）；数值只动 `gameCore.js` 的 CURVE。
+  两者绝不互相 import 写操作。改完必跑 `node tests/simulate.js`（146 全绿）。
 
 ## ⭐ GitHub Pages 试玩版（2026-08-18 上线，成功方法）
 
